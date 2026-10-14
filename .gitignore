@@ -1,0 +1,39 @@
+# Secrets and environment
+.env
+.env.*
+!.env.example
+
+# Node dependencies
+node_modules/
+package-lock.json.bak
+
+# Local databases and WAL logs (never commit SQLite DBs with user health data)
+database/*.sqlite
+database/*.sqlite-shm
+database/*.sqlite-wal
+*.sqlite
+*.db
+
+# Logs and runtime files
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# IDE and editor directories
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test coverage & intermediate build outputs
+coverage/
+.nyc_output/
+artifacts/file_generation/ttl=63d/intermediate/
+dist/
+build/

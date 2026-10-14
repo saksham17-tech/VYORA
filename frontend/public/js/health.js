@@ -1,0 +1,31 @@
+(function(){
+const condNotes={diabetes:"Noted. Keep meal timing and exercise aligned with your clinician's advice; VYORA cannot adjust medication.",bp:"Noted. Prefer gradual exercise progression and follow your clinician's sodium/activity advice.",thyroid:"Noted. Track energy changes and follow your clinician's treatment plan.",none:"No conditions selected — plans will use general fitness guidance."};
+const condNote=document.getElementById('condNote'); if(condNote) condNote.textContent=condNotes.none;
+document.querySelectorAll('#condRow button').forEach(b=>b.addEventListener('click',()=>{
+  if(b.dataset.c==='none'){document.querySelectorAll('#condRow button').forEach(x=>x.classList.remove('active'));b.classList.add('active');}
+  else {document.querySelector('#condRow [data-c="none"]').classList.remove('active');b.classList.toggle('active');}
+  const active=[...document.querySelectorAll('#condRow button.active')].map(x=>x.dataset.c);condNote.textContent=active.length?active.map(c=>condNotes[c]).join(' '):condNotes.none;
+}));
+const medList=document.getElementById('medList'), status=document.getElementById('medStatus');
+const channel=document.getElementById('medChannel'), emailField=document.getElementById('medEmailField'), phoneField=document.getElementById('medPhoneField');
+function setChannel(){emailField.style.display=channel.value==='email'?'':'none';phoneField.style.display=channel.value==='sms'?'':'none';}
+channel.addEventListener('change',setChannel);setChannel();
+function itemRow(m){const row=document.createElement('div');row.className='camp-item';const info=document.createElement('div');const name=document.createElement('b');name.textContent=m.label||m.name||'Reminder';const meta=document.createElement('span');meta.textContent=`Daily at ${m.time} · ${m.channel==='browser'?'This device':m.channel.toUpperCase()}${m.timezone?' · '+m.timezone:''}${m.active===false?' · Paused':''}`;info.append(name,document.createElement('br'),meta);row.append(info);if(m.id){const del=document.createElement('button');del.className='btn ghost';del.textContent='Remove';del.addEventListener('click',async()=>{try{await window.VyoraAPI.deleteMed(m.id);await loadMeds();}catch(e){status.textContent=e.message;}});row.append(del);}medList.append(row);}
+async function loadMeds(){medList.replaceChildren();try{const meds=await window.VyoraAPI.listMeds();meds.forEach(itemRow);}catch(e){status.textContent='Backend not connected yet. Browser reminders can still be used in this session.';}}
+function browserReminder(m){if(!('Notification'in window)){alert('This browser does not support notifications.');return;}Notification.requestPermission().then(permission=>{if(permission!=='granted'){status.textContent='Notification permission was not granted.';return;}const [h,min]=m.time.split(':').map(Number);let last='';const check=()=>{const now=new Date(),key=`${now.toDateString()}-${m.time}`;if(now.getHours()===h&&now.getMinutes()===min&&last!==key){last=key;new Notification('VYORA medication reminder',{body:`It is time for ${m.name}. Follow your clinician’s instructions.`});}};check();const timer=setInterval(check,20000);window.addEventListener('beforeunload',()=>clearInterval(timer),{once:true});status.textContent='Browser reminder active while this page remains open. Keep VYORA open at the reminder time.';});}
+document.getElementById('medAdd').addEventListener('click',async()=>{
+  const name=document.getElementById('medName').value.trim(),time=document.getElementById('medTime').value,ch=channel.value;
+  if(!name||!time){alert('Add a medication name and time first.');return;}
+  if(ch!=='browser'&&!document.getElementById('medConsent')?.checked){status.textContent='Please confirm consent before scheduling email/SMS reminders.';return;}
+  const m={name,time,channel:ch,consent:document.getElementById('medConsent')?.checked===true,email:document.getElementById('medEmail').value.trim(),phone:document.getElementById('medPhone').value.trim(),timezone:document.getElementById('medTimezone').value.trim()||'Asia/Kolkata'};
+  if(ch==='browser'){browserReminder(m);itemRow({...m,channel:'browser'});document.getElementById('medName').value='';return;}
+  try{const saved=await window.VyoraAPI.addMed(m);itemRow(saved);status.textContent=`Reminder saved. ${ch==='email'?'Email':'SMS'} delivery is scheduled on the backend; test it after configuring provider credentials.`;document.getElementById('medName').value='';document.getElementById('medTime').value='';}
+  catch(e){status.textContent=e.message+' You can choose “This device” for a browser-only reminder.';}
+});
+const vitalsList=document.getElementById('vitalsList');
+function renderVital(v){const row=document.createElement('div');row.className='camp-item';const d=document.createElement('b');d.textContent=new Date(v.createdAt||Date.now()).toLocaleString();const val=document.createElement('span');val.textContent=[v.bp?'BP '+v.bp:'',v.sugar?'Glucose '+v.sugar+' mg/dL':''].filter(Boolean).join(' · ');row.append(d,val);vitalsList.prepend(row);}
+document.getElementById('vAdd').addEventListener('click',async()=>{const bp=document.getElementById('vBP').value.trim(),raw=document.getElementById('vSugar').value,sugar=raw?Number(raw):null;if(!bp&&sugar===null){alert('Log at least one reading.');return;}try{const v=await window.VyoraAPI.addVitals({bp,sugar});renderVital(v);document.getElementById('vBP').value='';document.getElementById('vSugar').value='';}catch(e){status.textContent='Vitals could not sync to backend: '+e.message;}});
+async function loadVitals(){try{const values=await window.VyoraAPI.listVitals();vitalsList.replaceChildren();values.forEach(v=>renderVital(v));}catch(e){}}
+loadMeds();loadVitals();
+})();
+window.VyoraAPI.health().then(x=>{const el=document.getElementById('integrationStatus');if(el)el.textContent=`Backend connected · Gemini ${x.aiConfigured?'configured':'not configured'} · Email ${x.emailConfigured?'configured':'not configured'} · SMS ${x.smsConfigured?'configured':'not configured'}. Apple Health and Android health-data bridges require separate native/consented integration.`;}).catch(()=>{const el=document.getElementById('integrationStatus');if(el)el.textContent='Backend is not running. Start the Node server to enable Gemini and remote email/SMS reminders.';});
