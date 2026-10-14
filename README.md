@@ -1,152 +1,95 @@
 # VYORA — Voice-First AI Fitness, Nutrition & OVULA Women's Wellness Platform
 
 > **Version 2.0.0** · Aligned to **VYORA Product Requirements Document (PRD v2.0 — Prompts 1–20 & Appendices A–C)**  
-> **Architecture:** Node.js 20+ · Express · SQLite (`better-sqlite3`) / PostgreSQL dual-adapter · Vanilla JS Command-Deck Frontend
+> **Architecture:** Node.js 20+ · Express · SQLite (`better-sqlite3`) / PostgreSQL Dual-Driver · Modular Frontend
 
-VYORA is a personalized, voice-first fitness and transformation platform designed India-first with internationalization in mind. It pairs an AI fitness copilot, adaptive meal and workout planning, medication/habit reminders, progress tracking, community publishing, offline partner discovery, and human trainer coaching with **OVULA**, a dedicated, cycle-aware women's menstrual wellness companion.
+VYORA is a personalized, voice-first fitness and transformation platform designed India-first with internationalization in mind. It pairs an AI fitness copilot, adaptive meal and workout planning, medication and habit reminders, progress tracking, community publishing, offline partner discovery, and human coaching with **OVULA**, a dedicated, cycle-aware women's menstrual wellness companion.
 
 ---
 
-## Quick Start: Running the App (No Testing Required)
-
-To run the application immediately on your local machine:
+## Getting Started
 
 ### 1. Prerequisites
-- **Node.js 20+** installed (`node -v`)
-- **npm** installed (`npm -v`)
+- **Node.js 20+** (`node -v`)
+- **npm** (`npm -v`)
 
-### 2. Setup Environment
+### 2. Setup & Configuration
 ```bash
-# 1. Clone or unzip the repository and enter the directory
-cd VYORA_stage14
+# 1. Clone the repository
+git clone https://github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
+cd aVYORA_fullstack_v2
 
-# 2. Copy the environment template
+# 2. Create your local environment file
 cp .env.example .env
 ```
 
-Open `.env` in any text editor and make sure `JWT_SECRET` is set to any random string of 32+ characters:
+Open `.env` and set your `JWT_SECRET` (minimum 32 characters):
 ```env
-JWT_SECRET=super-secret-random-key-with-at-least-32-chars-for-dev
 PORT=3000
+NODE_ENV=development
+JWT_SECRET=replace-with-a-long-random-secret-key-of-at-least-32-chars
 DATABASE_PATH=./database/vyora.sqlite
 DEFAULT_TIMEZONE=Asia/Kolkata
-```
-*(Setting `GEMINI_API_KEY`, SMTP, and Twilio credentials is completely optional. When omitted, VYORA provides deterministic, schema-valid fallbacks and local development preview OTP codes out of the box).*
 
-### 3. Install Dependencies & Start the Server
+# Optional Provider Credentials:
+GEMINI_API_KEY=
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_FROM_NUMBER=
+```
+*(When external provider keys are omitted, VYORA operates with deterministic, schema-valid fallbacks and local preview OTP codes for testing).*
+
+### 3. Run Locally
 ```bash
-# Install packages
+# Install dependencies
 npm install
 
 # Start the application server
 npm start
 ```
+Open **`http://localhost:3000`** in your browser. A guest session will be created automatically.
 
-### 4. Open in Your Browser
-Open your browser and navigate to:
-```
-http://localhost:3000
-```
-- A guest session will be created automatically.
-- Explore the **Build my plan** generator, **Talk to VYORA** voice/text copilot, **OVULA** menstrual companion, **Special Training** console, and **Health Journey** medication reminders right away.
-
----
-
-## Pushing to GitHub: Files to NOT Add
-
-Before running `git add .` and committing, ensure you **never commit secrets, credentials, or local databases containing personal health records**.
-
-### Files That Must Be Excluded:
-1. **`.env` and `.env.*`** (Contains API keys, JWT secrets, SMTP credentials, Twilio tokens. Only commit `.env.example`).
-2. **`node_modules/`** (Bulky downloaded dependencies; collaborators should install via `npm install`).
-3. **`database/*.sqlite`, `database/*.sqlite-wal`, `database/*.sqlite-shm`** (Local SQLite database files; schema is created automatically via `database/schema.sql` on startup).
-4. **`.DS_Store` / `Thumbs.db`** (Operating system thumbnail cache files).
-5. **`*.log` / `npm-debug.log*`** (Server execution logs).
-6. **`.vscode/` / `.idea/`** (Local editor settings).
-
-### Recommended `.gitignore`
-This repository already includes this `.gitignore`:
-```gitignore
-# Secrets and environment
-.env
-.env.*
-!.env.example
-
-# Node dependencies
-node_modules/
-
-# Local databases and WAL logs (never commit SQLite DBs with user health data)
-database/*.sqlite
-database/*.sqlite-shm
-database/*.sqlite-wal
-*.sqlite
-*.db
-
-# Logs and runtime files
-logs/
-*.log
-npm-debug.log*
-
-# Operating system files
-.DS_Store
-Thumbs.db
-
-# IDE and editor directories
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# Test coverage & build artifacts
-coverage/
-dist/
-build/
-```
-
-### Safe Git Push Workflow
+### 4. Running the Test Suite (Optional)
 ```bash
-# 1. Verify what git sees before adding
-git status
-
-# 2. Stage tracked project files (respecting .gitignore)
-git add .
-
-# 3. Double-check that .env and .sqlite are NOT staged:
-git status
-
-# 4. Commit and push to GitHub
-git commit -m "feat: complete VYORA full-stack platform v2.0 aligned to PRD prompts 1-20"
-git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
-git push -u origin main
+npm test
 ```
+Executes all **34 automated tests** offline (no external API keys required), covering:
+- AI Safety, red-flag triage, and prompt-injection defense
+- Appendix C schema validation & partial single-segment plan edits
+- Cross-tenant / cross-user authorization isolation
+- Reminder scheduler recovery, quiet hours, and idempotency
+- 10-case Gold-Set Evaluation Harness across all 9 PRD Prompt 18 categories (`100%` pass rate)
 
 ---
 
-## Core Product Capabilities (PRD Prompts 1–20)
+## Key Features
 
 ### 1. VYORA AI Copilot (Voice & Text)
-- Persistent entry point with microphone control, spoken output via browser Web Speech synthesis, and text fallback.
-- **Stop Audio**: Dedicated `speechSynthesis.cancel()` control to interrupt playback.
-- **User-Controlled Memory**: Visible preferences stored per user (`GET/PUT/DELETE /api/chat/memory`) that users can inspect, edit, or wipe anytime.
-- **Safety Pre/Post-Check Layer**: Emergency red-flag symptoms (cardiac pain, breathing distress, severe bleeding, fainting) escalate immediately to emergency care advice (Dial 112 in India) without triaging or generating workout plans.
+- Hands-free Web Speech API input/output with immediate text fallback.
+- **Stop Audio**: Dedicated `speechSynthesis.cancel()` control to interrupt audio responses.
+- **User-Controlled Memory**: Visible, editable, and clearable preferences (`GET/PUT/DELETE /api/chat/memory`).
+- **Safety Pre/Post-Check Layer**: Emergency red-flag symptoms escalate immediately to urgent care guidance (Dial 112 in India) without triaging or generating workout plans.
 - **Prompt Injection & Medication Guard**: Refuses prompt injection attacks and requests to alter prescribed medication dosages.
 - **Report AI Answer**: User controls to flag inaccurate or unsafe AI responses (`POST /api/ai/report`).
 
 ### 2. Adaptive Diet & Workout Planning
-- **Server-Side Appendix C Contract Validation**: `POST /api/plans/generate` produces structured meal templates, portion guidance, and 7-day workout schedules with safe calorie deficit bounds (`≥1,350 kcal/day`) and explicit uncertainty labels (`±15%` / `±150 kcal`).
+- **Server-Side Appendix C Contract Validation**: `POST /api/plans/generate` produces structured meal templates, portion guidance, and 7-day workout splits with safe calorie deficit bounds (`≥1,350 kcal/day`) and explicit uncertainty labels (`±15%` / `±150 kcal`).
 - **Indian Regional Nutrition**: Moong dal chilla, paneer tikka, dal palak, jowar/bajra millet rotis, roasted chana/makhana, and tandoori chicken.
-- **Conversational Partial Plan Regeneration**: `PATCH /api/plans/:id` allows changing single constraints (e.g. *"no eggs today"*, *"no dairy"*, *"make this an outdoor workout"*, *"shorter 20m session"*, *"my knee hurts"*) by regenerating **only** the affected meal slot or workout day while preserving Lunch, Dinner, and all other days untouched.
+- **Conversational Partial Plan Regeneration**: `PATCH /api/plans/:id` allows changing single constraints (e.g., *"no eggs today"*, *"make this an outdoor workout"*, *"shorter 20m session"*, *"my knee hurts"*) by regenerating **only** the affected meal slot or workout day while preserving Lunch, Dinner, and all other days untouched.
 
 ### 3. Medication & Habit Reminders (Reliable Lifecycle)
-- **Verified Contact Channels**: Registered accounts must verify their email or phone before scheduling outbound reminders (`403 UNVERIFIED_DESTINATION`).
-- **Minimal Lock-Screen Previews**: Sends privacy-preserving notices by default so sensitive drug names aren't exposed on shared lock screens.
-- **Quiet Hours**: Respects user-defined quiet windows (default 22:00 to 07:00), deferring non-urgent reminders until quiet hours end.
-- **2-Hour Lookback Recovery & Idempotency**: Scheduler ticks recover missed reminders after restarts without duplicate sends via `UNIQUE(reminder_id, occurrence_key)`.
+- **Verified Destinations Only**: Registered accounts must verify email or phone before scheduling outbound reminders (`403 UNVERIFIED_DESTINATION`).
+- **Privacy-Preserving Previews**: Minimal lock-screen messages by default to prevent exposing sensitive medication names on shared screens.
+- **Quiet Hours**: Respects user-configured quiet hours (default 22:00 to 07:00), deferring non-urgent reminders until quiet hours end.
+- **2-Hour Lookback Recovery & Idempotency**: Scheduler ticks recover missed reminders after process restarts without duplicate sends via `UNIQUE(reminder_id, occurrence_key)`.
 - **Opt-Out / STOP**: Users can unsubscribe from SMS/email reminders at any time (`POST /api/reminders/opt-out`).
 
 ### 4. OVULA Menstrual Wellness
-- **Cycle-Aware General Support**: Phase-based activity tips, cramp-comfort guidance (heat, gentle movement, hydration), and self-care tracking.
+- **Cycle-Aware Support**: Phase-based activity tips, cramp-comfort strategies (heat, gentle movement, hydration), and self-care tracking.
 - **Medical Safety Boundaries**: Clear disclaimers that cycle estimates are approximate and never a substitute for clinical diagnosis or contraception.
 - **Red-Flag Escalation**: Automatically alerts users when unusually heavy bleeding, sudden severe pain, or fainting is logged.
 - **Privacy Controls**: Private by default, with purpose-specific consent, dedicated export (`GET /api/ovula/export`), and complete history deletion (`DELETE /api/ovula/data`).
@@ -171,13 +114,13 @@ git push -u origin main
 
 ---
 
-## Codebase Architecture
+## Architecture & Codebase Map
 
 ```text
 VYORA/
 ├── backend/
 │   ├── src/
-│   │   ├── server.js                   # Application bootstrap, CSP, CORS, request context & error handler
+│   │   ├── server.js                   # Express bootstrap, CSP, CORS, request context & error handler
 │   │   ├── db.js                       # SQLite connection & schema initializer
 │   │   ├── db-postgres.js              # PostgreSQL pool & placeholder translation adapter
 │   │   ├── middleware/
@@ -232,36 +175,16 @@ VYORA/
 
 ---
 
-## Automated Test Suite
+## Production Deployment (PostgreSQL)
 
-When you want to run the automated tests:
-```bash
-npm test
-```
-Executes all **34 tests** offline (no external API keys required):
-- AI Safety & Red-Flag escalation checks
-- Cross-tenant / cross-user authorization isolation
-- Appendix C schema validation & partial plan regeneration
-- Reminder scheduler lookback recovery & idempotency across restarts
-- Purpose-specific consent grant/revoke and PII-redacted audit trail
-- Zero `innerHTML` regression audit across all frontend modules
-- 10-case Gold-Set Evaluation Harness across all 9 PRD Prompt 18 categories (`100%` pass rate)
+By default, the server runs with zero configuration on SQLite (`database/vyora.sqlite`). 
+
+For multi-instance cloud deployments (AWS RDS, Supabase, Neon, Render Postgres):
+1. Set `DATABASE_URL=postgres://user:password@host:5432/vyora` in your hosting dashboard.
+2. Apply `database/postgres_schema.sql` to your PostgreSQL database.
+3. The server automatically uses `backend/src/db-postgres.js` with parameterized query translation and connection pooling.
 
 ---
 
-## Deployment & Database Cut-Over
-
-### Local & Demo Mode (Zero Configuration)
-By default, the server runs on SQLite (`database/vyora.sqlite`). All migrations and tables are applied automatically on startup.
-
-### Production Deployment (Managed PostgreSQL)
-To connect to managed PostgreSQL:
-1. Provision a PostgreSQL instance (e.g. AWS RDS, Supabase, Neon, Render Postgres).
-2. Set `DATABASE_URL=postgres://user:password@host:5432/vyora` in your production environment.
-3. Apply `database/postgres_schema.sql`.
-4. The application includes `backend/src/db-postgres.js` with parameter translation and connection pooling hooks.
-
----
-
-## License & Compliance
-This software is provided for wellness and routine management. It does not provide medical diagnoses, clinical treatment, or prescription adjustments. Always consult a qualified medical professional for health conditions.
+## Disclaimer & Compliance
+This software is provided for general wellness, fitness, and habit-tracking purposes. It does not provide medical diagnoses, clinical treatment, or prescription adjustments. Always consult a qualified medical professional for personal health concerns or severe menstrual symptoms.
