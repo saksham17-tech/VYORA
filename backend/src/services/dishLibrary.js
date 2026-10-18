@@ -33,7 +33,7 @@ function dish(id, name, slots, diets, allergens, cuisine, mainProtein, entries, 
         : /rice|pulao|quinoa|millet|roti|roti|dal|curry|rajma|chole|khichdi/i.test(name)
           ? (diets.includes('vegan')
             ? [['tomato', 0.5], ['avocado', 0.5], ['cucumber', 0.5]]
-            : [['hungcurd', 0.5], ['tomato', 0.5], ['cucumber', 0.5]])
+            : [['hungcurd', 0.5], ['tomato', 0.5], ['cucumber', 0.5], ['ghee', 3]])
           : [['cucumber', 0.5], ['tomato', 0.5]]
   ).filter(([foodId]) => !componentIds.has(foodId));
   const fruitIds = new Set(['banana', 'apple', 'orange', 'berries', 'mango', 'papaya', 'guava', 'kiwi']);
@@ -71,7 +71,9 @@ function dish(id, name, slots, diets, allergens, cuisine, mainProtein, entries, 
     components,
     scaleMin: options.scaleMin ?? (fixedUnits ? 0.9 : 0.75),
     scaleMax: options.scaleMax ?? (fixedUnits ? 1.1 : 1.75),
-    addOns: filteredAddOns
+    addOns: (filteredAddOns.length > 3
+      ? [...filteredAddOns.slice(0, 2), filteredAddOns[filteredAddOns.length - 1]]
+      : filteredAddOns)
       .filter(([foodId]) => foodId !== 'fruit')
       .map(([foodId, baseQty, unit]) => component(foodId, baseQty, unit)),
     prepNotes: options.prepNotes || `Prepare ${name.toLowerCase()} with measured portions and serve fresh.`
@@ -412,5 +414,236 @@ export const dishLibrary = definitions.map(([id, name, slots, diets, allergens, 
     options
   )
 );
+
+const largeVariantFood = item => {
+  if (item.diets.includes('vegan')) return 'oliveoil';
+  return 'ghee';
+};
+const hasNonGheeFatTopping = item => item.components.some(part =>
+  ['avocado', 'oliveoil', 'peanutbutter', 'almonds', 'walnuts', 'pumpkinseeds', 'chia', 'flax', 'tahini']
+    .includes(part.foodId));
+
+for (const base of [...dishLibrary]) {
+  if (!base.slots.some(slot => ['Lunch', 'Dinner'].includes(slot))) continue;
+  const extraFoodId = largeVariantFood(base);
+  if (extraFoodId === 'ghee' && hasNonGheeFatTopping(base)) continue;
+  const extraFood = foodsById.get(extraFoodId);
+  if (!extraFood || base.components.length >= 5) continue;
+  const extra = component(extraFoodId, 3);
+  dishLibrary.push({
+    ...base,
+    id: `${base.id}-large`,
+    name: `${base.name} (Large Portion)`,
+    allergens: [...new Set([...base.allergens, ...extraFood.allergens])],
+    components: [...base.components, extra],
+    addOns: base.addOns.filter(addOn => addOn.foodId !== extraFoodId),
+    scaleMax: 1.75,
+    prepNotes: `${base.prepNotes} Use the larger serving only when additional energy is needed.`
+  });
+}
+
+for (const base of [...dishLibrary]) {
+  if (base.id.endsWith('-protein') ||
+    !base.diets.includes('keto') ||
+    !base.slots.some(slot => ['Breakfast', 'Lunch', 'Dinner'].includes(slot))) continue;
+  const proteinComponent = base.components.find(part =>
+    ['paneer', 'tofu', 'egg', 'eggwhite', 'chicken', 'fish', 'salmon', 'prawns', 'tempeh'].includes(part.foodId));
+  if (!proteinComponent || base.components.length >= 5) continue;
+  const boostedProtein = {
+    ...proteinComponent,
+    baseQty: proteinComponent.baseQty * 1.45,
+    kcal: proteinComponent.kcal * 1.45,
+    proteinG: proteinComponent.proteinG * 1.45,
+    carbsG: proteinComponent.carbsG * 1.45,
+    fatG: proteinComponent.fatG * 1.45
+  };
+  dishLibrary.push({
+    ...base,
+    id: `${base.id}-protein`,
+    name: `${base.name} (High Protein)`,
+    components: base.components.map(part => part === proteinComponent ? boostedProtein : part),
+    scaleMax: 1.75,
+    prepNotes: `${base.prepNotes} Use the higher protein serving when required by the daily target.`
+  });
+}
+
+for (const base of [...dishLibrary]) {
+  if (base.id.includes('-balanced') ||
+    !['chicken', 'fish', 'mutton', 'prawns'].includes(base.mainProtein) ||
+    !base.slots.some(slot => ['Lunch', 'Dinner'].includes(slot))) continue;
+  const ghee = foodsById.get('ghee');
+  const proteinComponent = base.components.find(part => part.foodId === base.mainProtein || part.foodId === 'salmon');
+  if (!ghee || !proteinComponent || base.components.length >= 5) continue;
+  const reducedProtein = {
+    ...proteinComponent,
+    baseQty: proteinComponent.baseQty * 0.35,
+    kcal: proteinComponent.kcal * 0.35,
+    proteinG: proteinComponent.proteinG * 0.35,
+    carbsG: proteinComponent.carbsG * 0.35,
+    fatG: proteinComponent.fatG * 0.35
+  };
+  dishLibrary.push({
+    ...base,
+    id: `${base.id}-lean`,
+    name: `${base.name} (Lean Energy)`,
+    components: [...base.components.map(part => part === proteinComponent ? reducedProtein : part), component('ghee', 8)],
+    allergens: [...new Set([...base.allergens, ...ghee.allergens])],
+    addOns: base.addOns.filter(addOn => addOn.foodId !== 'ghee'),
+    scaleMax: 1.75,
+    prepNotes: `${base.prepNotes} Use the lean protein and energy portion for a lower-protein calorie target.`
+  });
+}
+
+for (const base of [...dishLibrary]) {
+  if (base.id.endsWith('-large') ||
+    !['chicken', 'fish', 'mutton', 'prawns'].includes(base.mainProtein) ||
+    !base.slots.some(slot => ['Lunch', 'Dinner'].includes(slot))) continue;
+  const ghee = foodsById.get('ghee');
+  if (hasNonGheeFatTopping(base)) continue;
+  const proteinComponent = base.components.find(part => part.foodId === base.mainProtein || part.foodId === 'salmon');
+  if (!ghee || !proteinComponent || base.components.length >= 5) continue;
+  const reducedProtein = {
+    ...proteinComponent,
+    baseQty: proteinComponent.baseQty * 0.5,
+    kcal: proteinComponent.kcal * 0.5,
+    proteinG: proteinComponent.proteinG * 0.5,
+    carbsG: proteinComponent.carbsG * 0.5,
+    fatG: proteinComponent.fatG * 0.5
+  };
+  const components = base.components.map(part => part === proteinComponent ? reducedProtein : part);
+  components.push(component('ghee', 6));
+  dishLibrary.push({
+    ...base,
+    id: `${base.id}-balanced`,
+    name: `${base.name} (Energy Balanced)`,
+    components,
+    allergens: [...new Set([...base.allergens, ...ghee.allergens])],
+    addOns: base.addOns.filter(addOn => addOn.foodId !== 'ghee'),
+    scaleMax: 1.75,
+    prepNotes: `${base.prepNotes} Use the balanced protein and energy portions for larger calorie targets.`
+  });
+}
+
+for (const base of [...dishLibrary]) {
+  if (base.id.includes('-') && (base.id.endsWith('-large') || base.id.endsWith('-balanced'))) continue;
+  if (base.diets.includes('keto') && base.slots.some(slot => ['Breakfast', 'Lunch', 'Dinner'].includes(slot))) {
+    const ghee = foodsById.get('ghee');
+    const proteinComponent = base.components.find(part =>
+      ['paneer', 'tofu', 'egg', 'eggwhite', 'chicken', 'fish', 'salmon', 'prawns'].includes(part.foodId));
+    const existingFat = base.components.find(part =>
+      ['avocado', 'oliveoil', 'peanutbutter', 'almonds', 'walnuts', 'pumpkinseeds', 'chia', 'flax', 'tahini'].includes(part.foodId));
+    const energyFood = existingFat ? foodsById.get(existingFat.foodId) : ghee;
+    const energyFoodId = existingFat ? existingFat.foodId : 'ghee';
+    if (!energyFood || !proteinComponent || base.components.length >= 5) continue;
+    const reducedProtein = {
+      ...proteinComponent,
+      baseQty: proteinComponent.baseQty * 0.5,
+      kcal: proteinComponent.kcal * 0.5,
+      proteinG: proteinComponent.proteinG * 0.5,
+      carbsG: proteinComponent.carbsG * 0.5,
+      fatG: proteinComponent.fatG * 0.5
+    };
+    dishLibrary.push({
+      ...base,
+      id: `${base.id}-energy`,
+      name: `${base.name} (Keto Energy)`,
+      components: [...base.components.map(part => part === proteinComponent ? reducedProtein : part),
+        component(energyFoodId, energyFoodId === 'ghee' ? 8 : 2)],
+      allergens: [...new Set([...base.allergens, ...energyFood.allergens])],
+      addOns: base.addOns.filter(addOn => addOn.foodId !== energyFoodId),
+      scaleMax: 1.75,
+      prepNotes: `${base.prepNotes} Use the energy-balanced portion for higher calorie needs.`
+    });
+  }
+}
+
+for (const base of [...dishLibrary]) {
+  if (base.id.includes('-') && (base.id.endsWith('-large') || base.id.endsWith('-balanced') || base.id.endsWith('-energy'))) continue;
+  if (!base.diets.includes('veg') && !base.diets.includes('vegan')) continue;
+  const proteinComponent = base.components.find(part =>
+    ['paneer', 'tofu', 'dal', 'rajma', 'chana', 'moong', 'soya', 'tempeh', 'quinoa'].includes(part.foodId));
+  if (!proteinComponent || base.components.length >= 5) continue;
+  const extraProtein = {
+    ...proteinComponent,
+    baseQty: proteinComponent.baseQty * 0.5,
+    kcal: proteinComponent.kcal * 0.5,
+    proteinG: proteinComponent.proteinG * 0.5,
+    carbsG: proteinComponent.carbsG * 0.5,
+    fatG: proteinComponent.fatG * 0.5
+  };
+  dishLibrary.push({
+    ...base,
+    id: `${base.id}-protein`,
+    name: `${base.name} (Extra Protein)`,
+    components: [...base.components, extraProtein],
+    scaleMax: 1.75,
+    prepNotes: `${base.prepNotes} Add the extra protein serving when needed to meet the daily target.`
+  });
+}
+
+const fullYogurtSnack = dishLibrary.find(item => item.id === 'snack-yogurt-berries');
+if (fullYogurtSnack) {
+  dishLibrary.push({
+    ...fullYogurtSnack,
+    id: 'snack-yogurt-berries-full',
+    name: 'Greek Yogurt with Berries (Full Protein Serving)',
+    scaleMin: 1,
+    scaleMax: 1.1
+  });
+}
+
+for (const base of [...dishLibrary]) {
+  if (!base.diets.includes('nonveg') ||
+    /-(large|balanced|lean|energy|protein)$/.test(base.id) ||
+    !['chicken', 'fish', 'mutton', 'prawns', 'egg'].includes(base.mainProtein) ||
+    !base.slots.some(slot => ['Breakfast', 'Lunch', 'Dinner'].includes(slot))) continue;
+  const proteinComponent = base.components.find(part => part.foodId === base.mainProtein);
+  if (!proteinComponent || base.components.length >= 5) continue;
+  const extraProtein = {
+    ...proteinComponent,
+    baseQty: proteinComponent.baseQty * 0.45,
+    kcal: proteinComponent.kcal * 0.45,
+    proteinG: proteinComponent.proteinG * 0.45,
+    carbsG: proteinComponent.carbsG * 0.45,
+    fatG: proteinComponent.fatG * 0.45
+  };
+  dishLibrary.push({
+    ...base,
+    id: `${base.id}-protein`,
+    name: `${base.name} (Extra Protein)`,
+    components: [...base.components, extraProtein],
+    scaleMax: 1.75,
+    prepNotes: `${base.prepNotes} Add the extra lean protein serving when required.`
+  });
+}
+
+for (const base of [...dishLibrary]) {
+  if (base.id.includes('-carb') ||
+    !['veg', 'vegan'].some(diet => base.diets.includes(diet)) ||
+    !base.slots.some(slot => ['Lunch', 'Dinner'].includes(slot))) continue;
+  const proteinComponent = base.components.find(part =>
+    ['paneer', 'tofu', 'dal', 'rajma', 'chana', 'moong', 'masoor', 'soya', 'tempeh', 'quinoa', 'blackbeans'].includes(part.foodId));
+  const rice = foodsById.get('rice');
+  if (!proteinComponent || !rice || base.components.length >= 5) continue;
+  const reducedProtein = {
+    ...proteinComponent,
+    baseQty: proteinComponent.baseQty * 0.55,
+    kcal: proteinComponent.kcal * 0.55,
+    proteinG: proteinComponent.proteinG * 0.55,
+    carbsG: proteinComponent.carbsG * 0.55,
+    fatG: proteinComponent.fatG * 0.55
+  };
+  dishLibrary.push({
+    ...base,
+    id: `${base.id}-carb`,
+    name: `${base.name} (Carb Balanced)`,
+    components: [
+      ...base.components.map(part => part === proteinComponent ? reducedProtein : part),
+      component('rice', 1)
+    ],
+    scaleMax: 1.75,
+    prepNotes: `${base.prepNotes} Use the higher-carbohydrate serving for endurance or higher-energy days.`
+  });
+}
 
 export default dishLibrary;

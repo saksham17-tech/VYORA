@@ -93,6 +93,7 @@
         <div class="grid cols-3">
           <div class="field"><label for="pHeight">Height (cm)</label><input id="pHeight" type="number" placeholder="e.g. 170"/></div>
           <div class="field"><label for="pWeight">Weight (kg)</label><input id="pWeight" type="number" placeholder="e.g. 65"/></div>
+          <div class="field"><label for="pAge">Age</label><input id="pAge" type="number" min="16" max="90" required placeholder="e.g. 28"/></div>
           <div class="field"><label for="pGender">Gender</label>
             <select id="pGender" style="width:100%;">
               <option value="male">Male</option><option value="female">Female</option><option value="other">Other / Prefer not to say</option>
@@ -106,12 +107,35 @@
           </div>
           <div class="field"><label for="pGoal">Transformation goal</label>
             <select id="pGoal" style="width:100%;">
-              <option value="fatloss">Fat loss</option><option value="musclegain">Muscle gain</option>
+              <option value="general">General wellness</option><option value="fatloss">Fat loss</option><option value="musclegain">Muscle gain</option>
               <option value="recomp">Body recomposition</option><option value="endurance">Endurance</option>
             </select>
           </div>
+          <div class="field"><label for="pActivity">Activity level</label>
+            <select id="pActivity" style="width:100%;">
+              <option value="light">Light</option><option value="sedentary">Sedentary</option>
+              <option value="moderate">Moderate</option><option value="active">Active</option>
+            </select>
+          </div>
+          <div class="field"><label for="pCuisine">Cuisine</label>
+            <select id="pCuisine" style="width:100%;">
+              <option value="any">Any</option><option value="north-indian">North Indian</option>
+              <option value="south-indian">South Indian</option>
+            </select>
+          </div>
+          <div class="field allergy-field"><span class="field-label">Allergies</span>
+            <div id="pAllergies" class="checkbox-row">
+              <label><input type="checkbox" value="nuts"> Nuts</label>
+              <label><input type="checkbox" value="soy"> Soy</label>
+              <label><input type="checkbox" value="gluten"> Gluten</label>
+              <label><input type="checkbox" value="dairy"> Dairy</label>
+              <label><input type="checkbox" value="eggs"> Eggs</label>
+              <label><input type="checkbox" value="fish"> Fish</label>
+            </div>
+          </div>
           <div class="field"><label>&nbsp;</label><button class="btn" id="pGenerate" style="width:100%;">Generate my plan</button></div>
         </div>
+        <p id="pFormError" class="form-error" role="alert"></p>
         <p id="pLocStatus" style="font-size:12.5px;margin:2px 0 0;"></p>
       </div>
 

@@ -12,6 +12,22 @@ import {
   applyPartialPlanEdit
 } from '../services/planEngine.js';
 
+const GENERATOR_WARNING_PATTERN = /fallback|tolerance|library|diagnostic/i;
+
+function userFacingPlan(plan) {
+  if (!plan || typeof plan !== 'object') return plan;
+  const safetyFlags = Array.isArray(plan.safetyFlags) ? plan.safetyFlags : [];
+  const leakedFlags = safetyFlags.filter(flag => typeof flag === 'string' && GENERATOR_WARNING_PATTERN.test(flag));
+  return {
+    ...plan,
+    safetyFlags: safetyFlags.filter(flag => typeof flag === 'string' && !GENERATOR_WARNING_PATTERN.test(flag)),
+    generationDiagnostics: [
+      ...(Array.isArray(plan.generationDiagnostics) ? plan.generationDiagnostics : []),
+      ...leakedFlags
+    ]
+  };
+}
+
 export function registerPlanRoutes(app) {
   app.post('/api/plans/generate', authOnly, (req, res) => {
     const profileRow = db.prepare('SELECT profile_json FROM profiles WHERE user_id = ?').get(req.user.sub);
@@ -123,13 +139,13 @@ export function registerPlanRoutes(app) {
   app.get('/api/plans', authOnly, (req, res) => res.json(
     db.prepare('SELECT id,kind,title,plan_json,model,created_at,updated_at FROM plans WHERE user_id=? ORDER BY created_at DESC LIMIT 100')
       .all(req.user.sub)
-      .map(p => ({ ...p, plan: json(p.plan_json), createdAt: p.created_at, updatedAt: p.updated_at, plan_json: undefined, created_at: undefined, updated_at: undefined }))
+      .map(p => ({ ...p, plan: userFacingPlan(json(p.plan_json)), createdAt: p.created_at, updatedAt: p.updated_at, plan_json: undefined, created_at: undefined, updated_at: undefined }))
   ));
 
   app.get('/api/plans/:id', authOnly, (req, res) => {
     const p = db.prepare('SELECT * FROM plans WHERE id=? AND user_id=?').get(req.params.id, req.user.sub);
     if (!p) return res.status(404).json({ error: 'Plan not found' });
-    res.json({ ...p, plan: json(p.plan_json) });
+    res.json({ ...p, plan: userFacingPlan(json(p.plan_json)) });
   });
 
   app.delete('/api/plans/:id', authOnly, (req, res) => {

@@ -13,6 +13,12 @@ import { dishLibrary } from './dishLibrary.js';
 const PLAN_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MEAL_SLOTS = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
 const MEAL_TARGET_SHARES = { Breakfast: 0.2, Lunch: 0.35, Dinner: 0.35, Snack: 0.1 };
+const GENERATOR_WARNING_PATTERN = /fallback|tolerance|library|diagnostic/i;
+
+function userSafetyFlags(flags) {
+  return (Array.isArray(flags) ? flags : [])
+    .filter(flag => typeof flag === 'string' && !GENERATOR_WARNING_PATTERN.test(flag));
+}
 
 function seededRandom(seed) {
   let value = seed >>> 0;
@@ -68,13 +74,21 @@ export function computeNutritionTargets(profile = {}) {
   }[goal];
   const targetKcal = Math.max(1350, Math.round(underweightFatLoss ? tdee : tdee * (1 + goalAdjustment)));
   const proteinPerKg = { fatloss: 1.6, musclegain: 1.8, recomp: 1.7, endurance: 1.4, general: 1.3 }[goal];
-  const proteinG = Math.round(weightKg * proteinPerKg);
+  const bmi25WeightKg = 25 * ((heightCm / 100) ** 2);
+  const referenceWeightKg = bmi <= 25
+    ? weightKg
+    : bmi25WeightKg + (0.25 * (weightKg - bmi25WeightKg));
+  const dietProteinCapShare = ['veg', 'vegan'].includes(profile.diet) ? 0.30 : 0.35;
+  const proteinCapG = (targetKcal * dietProteinCapShare) / 4;
+  const proteinFloorG = referenceWeightKg * 0.8;
+  const proteinG = Math.round(Math.max(proteinFloorG, Math.min(referenceWeightKg * proteinPerKg, proteinCapG)));
   const fatG = Math.round((targetKcal * 0.25) / 9);
   const carbsG = Math.max(0, Math.round((targetKcal - (proteinG * 4) - (fatG * 9)) / 4));
   return {
     heightCm, weightKg, age, gender, goal, activityLevel, activityMultiplier,
     bmr: Math.round(bmr), tdee: Math.round(tdee), bmi: Number(bmi.toFixed(1)),
-    targetKcal, proteinG, fatG, carbsG, underweightFatLoss
+    targetKcal, proteinG, fatG, carbsG, underweightFatLoss, referenceWeightKg: Number(referenceWeightKg.toFixed(1)),
+    calorieFloorApplied: targetKcal === 1350 && !underweightFatLoss && tdee * (1 + goalAdjustment) < 1350
   };
 }
 
@@ -205,7 +219,7 @@ export function generateMealPlan(targets, profile = {}) {
   const selectedHistory = [];
   const meals = [];
   const dailyTotals = [];
-  const warnings = [];
+  const generationDiagnostics = [];
   const usedBySlot = Object.fromEntries(MEAL_SLOTS.map(slot => [slot, new Map()]));
   const lastBySlot = Object.fromEntries(MEAL_SLOTS.map(slot => [slot, null]));
   const daySets = new Set();
@@ -257,7 +271,20 @@ export function generateMealPlan(targets, profile = {}) {
   };
 
   const renderDish = (item, scale, day, slot, selectedAddOns = []) => {
-    const rendered = [...item.components, ...selectedAddOns].map(componentItem => {
+    const mergedComponents = [...item.components, ...selectedAddOns].reduce((result, componentItem) => {
+      const existing = result.find(part => part.foodId === componentItem.foodId);
+      if (!existing) {
+        result.push({ ...componentItem });
+      } else {
+        existing.baseQty += componentItem.baseQty;
+        existing.kcal += componentItem.kcal;
+        existing.proteinG += componentItem.proteinG;
+        existing.carbsG += componentItem.carbsG;
+        existing.fatG += componentItem.fatG;
+      }
+      return result;
+    }, []);
+    const rendered = mergedComponents.map(componentItem => {
       const quantity = roundedQuantity(componentItem, scale);
       const food = foodDatabase.find(candidate => candidate.id === componentItem.foodId);
       return {
@@ -308,6 +335,7 @@ export function generateMealPlan(targets, profile = {}) {
       (!blocked.mainProtein || item.mainProtein !== blocked.mainProtein) &&
       (!blocked.staple || item.staple !== blocked.staple) &&
       (!blocked.veg || item.veg !== blocked.veg) &&
+      (!item.id.endsWith('-carb') || ['fatloss', 'endurance', 'general'].includes(profile.goal)) &&
       (!(eligible.filter(candidate => candidate.slots.includes(slot)).length >= 7) ||
         (usedBySlot[slot].get(item.id) || 0) === 0) &&
       (profile.diet !== 'keto' || (
@@ -359,24 +387,24 @@ export function generateMealPlan(targets, profile = {}) {
         const scale = item.scaleMin + ((item.scaleMax - item.scaleMin) * step / 20);
         const meal = renderDish(item, scale, '', slot);
         options.push({ item, scale, addOns: [], meal });
-        if (step === 20) {
-          const addOns = item.addOns.filter(addOn => {
-            const food = foodDatabase.find(candidate => candidate.id === addOn.foodId);
-            const fatToppings = [...item.components, addOn]
-              .filter(componentItem => foodDatabase.find(candidate => candidate.id === componentItem.foodId)?.role === 'fat_topping');
-            return food && foodMatchesProfile(food, profile) &&
-              !item.components.some(componentItem => componentItem.foodId === addOn.foodId) &&
-              item.components.length + 1 <= 6 &&
-              fatToppings.length <= 1;
-          });
-          const maxAddOns = slot === 'Lunch' || slot === 'Dinner' ? 1 : 2;
-          for (let addOnIndex = 0; addOnIndex < addOns.length; addOnIndex += 1) {
-            const selected = [addOns[addOnIndex]];
-            options.push({ item, scale, addOns: selected, meal: renderDish(item, scale, '', slot, selected) });
-            if (maxAddOns > 1 && addOns[addOnIndex + 1]) {
-              const pair = [addOns[addOnIndex], addOns[addOnIndex + 1]];
-              options.push({ item, scale, addOns: pair, meal: renderDish(item, scale, '', slot, pair) });
-            }
+        const addOns = item.addOns.filter(addOn => {
+          const food = foodDatabase.find(candidate => candidate.id === addOn.foodId);
+          const fatToppings = [...item.components, addOn]
+            .filter(componentItem => foodDatabase.find(candidate => candidate.id === componentItem.foodId)?.role === 'fat_topping');
+          return food && foodMatchesProfile(food, profile) &&
+            !item.components.some(componentItem => componentItem.foodId === addOn.foodId) &&
+            item.components.length + 1 <= 6 &&
+            fatToppings.length <= 1;
+        });
+        const maxAddOns = (slot === 'Lunch' || slot === 'Dinner')
+          ? (targets.targetKcal >= 2800 ? 2 : 1)
+          : 2;
+        for (let addOnIndex = 0; addOnIndex < addOns.length; addOnIndex += 1) {
+          const selected = [addOns[addOnIndex]];
+          options.push({ item, scale, addOns: selected, meal: renderDish(item, scale, '', slot, selected) });
+          if (maxAddOns > 1 && addOns[addOnIndex + 1]) {
+            const pair = [addOns[addOnIndex], addOns[addOnIndex + 1]];
+            options.push({ item, scale, addOns: pair, meal: renderDish(item, scale, '', slot, pair) });
           }
         }
       }
@@ -384,7 +412,7 @@ export function generateMealPlan(targets, profile = {}) {
     return options.sort((a, b) => {
       const score = option => {
         const proteinGap = option.meal.approxProteinG - budgetProtein;
-        const proteinPenalty = proteinGap < 0 ? Math.abs(proteinGap) * 50 : proteinGap * 50;
+        const proteinPenalty = proteinGap < 0 ? Math.abs(proteinGap) * 100 : proteinGap * 100;
         const meat = ['chicken', 'fish', 'mutton', 'prawns'].includes(option.item.mainProtein);
         const meatPenalty = profile.diet === 'nonveg' && ['Lunch', 'Dinner'].includes(slot) &&
           nonvegMeatCount < 4 && !meat ? 300 : 0;
@@ -551,6 +579,17 @@ export function generateMealPlan(targets, profile = {}) {
         dayDishIds[snackMealIndex] = lightSnack.id;
         globalSlotDishIds.add(`Snack:${lightSnack.id}`);
       }
+      if (dayMeals[snackMealIndex].approxKcal > snackBudget * 1.5) {
+        const balancedSnack = dishLibrary.find(item =>
+          item.id === 'snack-yogurt-berries-full' &&
+          !globalSlotDishIds.has(`Snack:${item.id}`) &&
+          !dayMeals.some(meal => meal.dishId === item.id));
+        if (balancedSnack) {
+          dayMeals[snackMealIndex] = renderDish(balancedSnack, balancedSnack.scaleMin, day, 'Snack');
+          dayDishIds[snackMealIndex] = balancedSnack.id;
+          globalSlotDishIds.add(`Snack:${balancedSnack.id}`);
+        }
+      }
     }
     const dayProtein = dayMeals.reduce((sum, meal) => sum + meal.approxProteinG, 0);
     if (dayProtein < targets.proteinG * 0.9) {
@@ -571,10 +610,32 @@ export function generateMealPlan(targets, profile = {}) {
         })[0];
       if (snackIndex >= 0 && proteinSnack) {
         const snackKcal = proteinSnack.components.reduce((sum, part) => sum + part.kcal, 0);
-        if (snackKcal <= targets.targetKcal * slotKcalShares.Snack * 1.5) {
+        const snackCeiling = targets.targetKcal < 2000 ? 1.75 : 1.5;
+        if (snackKcal <= targets.targetKcal * slotKcalShares.Snack * snackCeiling) {
           dayMeals[snackIndex] = renderDish(proteinSnack, proteinSnack.scaleMax, day, 'Snack');
           dayDishIds[snackIndex] = proteinSnack.id;
           globalSlotDishIds.add(`Snack:${proteinSnack.id}`);
+        }
+      }
+    }
+    if (snackMealIndex >= 0 && dayMeals[snackMealIndex].approxKcal > snackBudget * 1.5) {
+      const balancedSnack = dishLibrary.find(item => item.id === 'snack-yogurt-berries');
+      if (balancedSnack) {
+        dayMeals[snackMealIndex] = renderDish(balancedSnack, 1, day, 'Snack');
+        dayDishIds[snackMealIndex] = balancedSnack.id;
+        globalSlotDishIds.add(`Snack:${balancedSnack.id}`);
+      }
+    }
+    const correctedProtein = dayMeals.reduce((sum, meal) => sum + meal.approxProteinG, 0);
+    if (correctedProtein < targets.proteinG * 0.9) {
+      const gentleProteinSnack = dishLibrary.find(item =>
+        item.id === 'snack-yogurt-berries-full' && !globalSlotDishIds.has(`Snack:${item.id}`));
+      if (gentleProteinSnack) {
+        const snackIndex = dayMeals.findIndex(meal => meal.slot === 'Snack');
+        if (snackIndex >= 0) {
+          dayMeals[snackIndex] = renderDish(gentleProteinSnack, gentleProteinSnack.scaleMin, day, 'Snack');
+          dayDishIds[snackIndex] = gentleProteinSnack.id;
+          globalSlotDishIds.add(`Snack:${gentleProteinSnack.id}`);
         }
       }
     }
@@ -591,6 +652,155 @@ export function generateMealPlan(targets, profile = {}) {
         dayDishIds[adjustIndex] = adjustable.id;
       }
     }
+    const rebalancedKcal = dayMeals.reduce((sum, meal) => sum + meal.approxKcal, 0);
+    let energyIndex = -1;
+    if (rebalancedKcal < targets.targetKcal * 0.95) {
+      energyIndex = dayMeals.findIndex(meal => {
+        const item = dishLibrary.find(candidate => candidate.id === meal.dishId);
+        const hasFat = item?.components.some(part =>
+          foodDatabase.find(food => food.id === part.foodId)?.role === 'fat_topping');
+        return item && !hasFat && item.addOns.some(addOn =>
+          ['ghee', 'oliveoil', 'avocado'].includes(addOn.foodId));
+      });
+      if (energyIndex >= 0) {
+        const item = dishLibrary.find(candidate => candidate.id === dayMeals[energyIndex].dishId);
+        const energyAddOn = item.addOns.find(addOn =>
+          ['ghee', 'oliveoil', 'avocado'].includes(addOn.foodId));
+        const boostedEnergyAddOn = targets.targetKcal >= 3200
+          ? {
+            ...energyAddOn,
+            baseQty: energyAddOn.baseQty * 1.5,
+            kcal: energyAddOn.kcal * 1.5,
+            proteinG: energyAddOn.proteinG * 1.5,
+            carbsG: energyAddOn.carbsG * 1.5,
+            fatG: energyAddOn.fatG * 1.5
+          }
+          : energyAddOn;
+        dayMeals[energyIndex] = renderDish(item, dayMeals[energyIndex].scale, day, dayMeals[energyIndex].slot, [boostedEnergyAddOn]);
+        dayDishIds[energyIndex] = item.id;
+      }
+    }
+    const secondEnergyKcal = dayMeals.reduce((sum, meal) => sum + meal.approxKcal, 0);
+    if (targets.targetKcal >= 2800 && secondEnergyKcal < targets.targetKcal * 0.95) {
+      const secondEnergyIndex = dayMeals.findIndex((meal, index) => {
+        const item = dishLibrary.find(candidate => candidate.id === meal.dishId);
+        const hasFat = item?.components.some(part =>
+          foodDatabase.find(food => food.id === part.foodId)?.role === 'fat_topping');
+        return index !== energyIndex &&
+          item && !hasFat && item.addOns.some(addOn =>
+            ['ghee', 'oliveoil', 'avocado'].includes(addOn.foodId));
+      });
+      if (secondEnergyIndex >= 0) {
+        const item = dishLibrary.find(candidate => candidate.id === dayMeals[secondEnergyIndex].dishId);
+        const energyAddOn = item.addOns.find(addOn =>
+          ['ghee', 'oliveoil', 'avocado'].includes(addOn.foodId));
+        const boostedEnergyAddOn = targets.targetKcal >= 3200
+          ? {
+            ...energyAddOn,
+            baseQty: energyAddOn.baseQty * 1.5,
+            kcal: energyAddOn.kcal * 1.5,
+            proteinG: energyAddOn.proteinG * 1.5,
+            carbsG: energyAddOn.carbsG * 1.5,
+            fatG: energyAddOn.fatG * 1.5
+          }
+          : energyAddOn;
+        dayMeals[secondEnergyIndex] = renderDish(item, dayMeals[secondEnergyIndex].scale, day, dayMeals[secondEnergyIndex].slot, [boostedEnergyAddOn]);
+        dayDishIds[secondEnergyIndex] = item.id;
+      }
+    }
+    let rebalancedProtein = dayMeals.reduce((sum, meal) => sum + meal.approxProteinG, 0);
+    if (rebalancedProtein < targets.proteinG * 0.9) {
+      for (let pass = 0; pass < 4 && rebalancedProtein < targets.proteinG * 0.9; pass += 1) {
+        let bestIndex = -1;
+        let bestCandidate;
+        let bestScore = Number.POSITIVE_INFINITY;
+        for (let mealIndex = 0; mealIndex < dayMeals.length; mealIndex += 1) {
+          const meal = dayMeals[mealIndex];
+          const current = dishLibrary.find(candidate => candidate.id === meal.dishId);
+          const candidates = dishLibrary.filter(item => {
+            if (!item.slots.includes(meal.slot) ||
+              dayMeals.some(existing => existing.dishId === item.id) ||
+              globalSlotDishIds.has(`${meal.slot}:${item.id}`) ||
+              item.id.endsWith('-energy') ||
+              (profile.diet !== 'keto' && item.id.startsWith('keto-'))) return false;
+            if (profile.diet === 'keto' && item.components.some(part =>
+              ['salmon', 'rohu', 'prawns'].includes(part.foodId)) && meal.slot === 'Snack') return false;
+            if (meal.slot === 'Dinner') {
+              const lunch = dayMeals.find(existing => existing.slot === 'Lunch');
+              if (lunch && item.mainProtein === lunch.mainProtein) return false;
+            }
+            if (item.id.endsWith('-carb') && !['fatloss', 'endurance', 'general'].includes(profile.goal)) return false;
+            if (new Set(item.components
+              .filter(part => foodDatabase.find(food => food.id === part.foodId)?.role === 'fat_topping')
+              .map(part => part.foodId)).size > 1) return false;
+            return item.diets.includes(profile.diet) ||
+              (profile.diet === 'nonveg' && (item.diets.includes('nonveg') || item.diets.includes('veg')));
+          });
+          for (const candidate of candidates) {
+            const rendered = renderDish(candidate, candidate.scaleMax, day, meal.slot);
+            const proteinGain = rendered.approxProteinG - meal.approxProteinG;
+            if (proteinGain <= 0) continue;
+            const projectedProtein = rebalancedProtein + proteinGain;
+            const projectedKcal = dayMeals.reduce((sum, entry, index) =>
+              sum + (index === mealIndex ? rendered.approxKcal : entry.approxKcal), 0);
+            const score = Math.abs(targets.proteinG - projectedProtein) * 20 +
+              Math.abs(targets.targetKcal - projectedKcal) * 2;
+            if (score < bestScore) {
+              bestScore = score;
+              bestIndex = mealIndex;
+              bestCandidate = { item: candidate, rendered };
+            }
+          }
+        }
+        if (bestIndex < 0 || !bestCandidate) break;
+        dayMeals[bestIndex] = bestCandidate.rendered;
+        dayDishIds[bestIndex] = bestCandidate.item.id;
+        rebalancedProtein = dayMeals.reduce((sum, current) => sum + current.approxProteinG, 0);
+      }
+    }
+    const daySlotIds = new Set();
+    for (let mealIndex = 0; mealIndex < dayMeals.length; mealIndex += 1) {
+      const meal = dayMeals[mealIndex];
+      const key = `${meal.slot}:${meal.dishId}`;
+      if (!daySlotIds.has(key)) {
+        daySlotIds.add(key);
+        continue;
+      }
+      const replacement = eligible
+        .filter(item => item.slots.includes(meal.slot) &&
+          !globalSlotDishIds.has(`${meal.slot}:${item.id}`) &&
+          (!item.id.endsWith('-carb') || ['fatloss', 'endurance', 'general'].includes(profile.goal)) &&
+          new Set(item.components
+            .filter(part => foodDatabase.find(food => food.id === part.foodId)?.role === 'fat_topping')
+            .map(part => part.foodId)).size <= 1 &&
+          !dayMeals.some((existing, index) => index !== mealIndex && existing.dishId === item.id))
+        .sort((a, b) => {
+          const nutrition = item => item.components.reduce((result, part) => ({
+            kcal: result.kcal + part.kcal,
+            proteinG: result.proteinG + part.proteinG
+          }), { kcal: 0, proteinG: 0 });
+          const aNutrition = nutrition(a);
+          const bNutrition = nutrition(b);
+          const score = value => Math.abs(value.kcal - meal.approxKcal) +
+            Math.abs(value.proteinG - meal.approxProteinG) * 4;
+          return score(aNutrition) - score(bNutrition);
+        })[0];
+      if (replacement) {
+        const replacementBaseKcal = replacement.components.reduce((sum, part) => sum + part.kcal, 0);
+        const replacementScale = replacementBaseKcal
+          ? Math.max(replacement.scaleMin, Math.min(replacement.scaleMax, meal.approxKcal / replacementBaseKcal))
+          : replacement.scaleMin;
+        dayMeals[mealIndex] = renderDish(
+          replacement,
+          replacementScale,
+          day,
+          meal.slot
+        );
+        dayDishIds[mealIndex] = replacement.id;
+        globalSlotDishIds.add(`${meal.slot}:${replacement.id}`);
+        daySlotIds.add(`${meal.slot}:${replacement.id}`);
+      }
+    }
     meals.push(...dayMeals);
     const total = dayMeals.reduce((result, meal) => ({
       kcal: result.kcal + meal.approxKcal,
@@ -600,26 +810,80 @@ export function generateMealPlan(targets, profile = {}) {
     }), { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 });
     dailyTotals.push({
       day,
-      ...total,
-      kcal: total.kcal < targets.targetKcal * 0.95
-        ? Math.ceil(targets.targetKcal * 0.95)
-        : total.kcal > targets.targetKcal * 1.05
-          ? Math.floor(targets.targetKcal * 1.05)
-          : Math.round(total.kcal),
-      proteinG: Math.min(
-        Math.floor(targets.proteinG * 1.1),
-        Math.max(Math.ceil(targets.proteinG * 0.9), total.proteinG)
-      )
+      kcal: Math.round(total.kcal),
+      proteinG: Math.round(total.proteinG),
+      carbsG: Math.round(total.carbsG),
+      fatG: Math.round(total.fatG)
     });
     const dayKey = dayMeals.map(meal => meal.dishId).join('|');
-    if (daySets.has(dayKey)) warnings.push(`${day} repeated an identical meal set.`);
+    if (daySets.has(dayKey)) generationDiagnostics.push(`${day} repeated an identical meal set.`);
     daySets.add(dayKey);
     if (Math.abs(total.kcal - targets.targetKcal) > targets.targetKcal * 0.05 ||
       Math.abs(total.proteinG - targets.proteinG) > targets.proteinG * 0.1) {
-      warnings.push(`${day} used the library fallback tolerance (up to ±8% kcal / ±10% protein).`);
+      generationDiagnostics.push(`${day} used the library fallback tolerance (up to ±8% kcal / ±10% protein).`);
     }
   }
-  return { meals, dailyTotals, warnings };
+  const usedFinalSlotDishes = new Set();
+  for (let mealIndex = 0; mealIndex < meals.length; mealIndex += 1) {
+    const meal = meals[mealIndex];
+    const key = `${meal.slot}:${meal.dishId}`;
+    if (!usedFinalSlotDishes.has(key)) {
+      usedFinalSlotDishes.add(key);
+      continue;
+    }
+    const replacement = eligible
+      .filter(item => item.slots.includes(meal.slot) &&
+        !usedFinalSlotDishes.has(`${meal.slot}:${item.id}`) &&
+        (!item.id.endsWith('-carb') || ['fatloss', 'endurance', 'general'].includes(profile.goal)) &&
+        new Set(item.components
+          .filter(part => foodDatabase.find(food => food.id === part.foodId)?.role === 'fat_topping')
+          .map(part => part.foodId)).size <= 1 &&
+        !meals.some((existing, index) => index !== mealIndex && existing.dishId === item.id))
+      .sort((a, b) => {
+        const nutrition = item => item.components.reduce((result, part) => ({
+          kcal: result.kcal + part.kcal,
+          proteinG: result.proteinG + part.proteinG
+        }), { kcal: 0, proteinG: 0 });
+        const score = value => Math.abs(value.kcal - meal.approxKcal) +
+          Math.abs(value.proteinG - meal.approxProteinG) * 4;
+        return score(nutrition(a)) - score(nutrition(b));
+      })[0];
+    if (replacement) {
+      const replacementBaseKcal = replacement.components.reduce((sum, part) => sum + part.kcal, 0);
+      const replacementScale = replacementBaseKcal
+        ? Math.max(replacement.scaleMin, Math.min(replacement.scaleMax, meal.approxKcal / replacementBaseKcal))
+        : replacement.scaleMin;
+      meals[mealIndex] = renderDish(
+        replacement,
+        replacementScale,
+        meal.day,
+        meal.slot
+      );
+      usedFinalSlotDishes.add(`${meal.slot}:${replacement.id}`);
+    }
+  }
+  for (const day of PLAN_DAYS) {
+    const dayMeals = meals.filter(meal => meal.day === day);
+    const dayKcal = dayMeals.reduce((sum, meal) => sum + meal.approxKcal, 0);
+    if (dayKcal < targets.targetKcal * 0.95 || dayKcal > targets.targetKcal * 1.05) {
+      const meal = dayMeals.reduce((highest, current) =>
+        current.approxKcal > highest.approxKcal ? current : highest, dayMeals[0]);
+      const item = dishLibrary.find(candidate => candidate.id === meal.dishId);
+      if (item) {
+        const scale = Math.max(item.scaleMin, Math.min(item.scaleMax, meal.scale * targets.targetKcal / dayKcal));
+        const mealIndex = meals.indexOf(meal);
+        meals[mealIndex] = renderDish(item, scale, day, meal.slot);
+      }
+    }
+  }
+  for (const total of dailyTotals) {
+    const dayMeals = meals.filter(meal => meal.day === total.day);
+    total.kcal = Math.round(dayMeals.reduce((sum, meal) => sum + meal.approxKcal, 0));
+    total.proteinG = Math.round(dayMeals.reduce((sum, meal) => sum + meal.approxProteinG, 0));
+    total.carbsG = Math.round(dayMeals.reduce((sum, meal) => sum + meal.carbsG, 0));
+    total.fatG = Math.round(dayMeals.reduce((sum, meal) => sum + meal.fatG, 0));
+  }
+  return { meals, dailyTotals, generationDiagnostics };
 }
 
 const MEAL_TEMPLATES = {
@@ -1008,10 +1272,20 @@ export function buildAdaptivePlan(input = {}) {
   }
   if (allergies.length) constraintsHonored.push(`allergies:${allergies.join(',')}`);
   if (exclusions.length) constraintsHonored.push(`exclusions:${exclusions.join(',')}`);
-  const { meals, dailyTotals, warnings: mealWarnings } = generateMealPlan(targets, {
+  const { meals, dailyTotals, generationDiagnostics } = generateMealPlan(targets, {
     ...targets, diet, allergies, exclusions
   });
-  safetyFlags.push(...mealWarnings);
+  const worstDailyDeviation = dailyTotals.reduce((maximum, total) => {
+    const kcalDeviation = Math.abs(total.kcal - targets.targetKcal) / targets.targetKcal * 100;
+    const proteinDeviation = Math.abs(total.proteinG - targets.proteinG) / targets.proteinG * 100;
+    return Math.max(maximum, kcalDeviation, proteinDeviation);
+  }, 0);
+  const accuracyNote = worstDailyDeviation > 5
+    ? ` Daily totals may differ from your target by up to ${Math.ceil(worstDailyDeviation / 5) * 5}%.`
+    : '';
+  if (targets.calorieFloorApplied) {
+    safetyFlags.push('The minimum safe calorie floor of 1350 kcal/day was applied.');
+  }
 
   // Clone and adapt workout days
   let days = structuredClone(BASE_WORKOUT_DAYS).map(d => ({
@@ -1074,14 +1348,15 @@ export function buildAdaptivePlan(input = {}) {
     constraintsHonored,
     meals,
     dailyTotals,
+    generationDiagnostics,
     days,
     substitutions: {
       eggFree: 'Moong dal chilla, paneer/tofu bhurji, or roasted chana bowls.',
       noEquipment: 'Bodyweight squats/bridges, incline push-ups, backpack rows, and brisk walking.',
       lowImpactPain: 'Switch to glute bridges, seated upper-body mobility, or rest; consult a clinician if pain persists.'
     },
-    safetyFlags: safetyFlags.length
-      ? safetyFlags
+    safetyFlags: userSafetyFlags(safetyFlags).length
+      ? userSafetyFlags(safetyFlags)
       : ['General wellness plan only — not a medical prescription or clinical diet. Stop any exercise that causes sharp or worsening pain.'],
     estimateMetadata: {
       estimatedDailyKcal: targets.targetKcal,
@@ -1097,7 +1372,7 @@ export function buildAdaptivePlan(input = {}) {
       confidence: 'moderate_estimate',
       disclaimer: 'All calorie and macro values are approximate estimates (±15%). Consult a qualified dietitian or doctor for medical nutrition therapy.'
     },
-    explanation: `Generated a personalized ${diet} diet and ${days.length}-day workout plan for ${goal}. BMI ${targets.bmi}, TDEE ${targets.tdee} kcal, target ${targets.targetKcal} kcal/day with ${targets.proteinG}g protein, ${targets.carbsG}g carbs, and ${targets.fatG}g fat. Honored constraints: ${constraintsHonored.join(', ')}.`,
+    explanation: `Generated a personalized ${diet} diet and ${days.length}-day workout plan for ${goal}. BMI ${targets.bmi}, TDEE ${targets.tdee} kcal, target ${targets.targetKcal} kcal/day with ${targets.proteinG}g protein, ${targets.carbsG}g carbs, and ${targets.fatG}g fat. Honored constraints: ${constraintsHonored.join(', ')}.${accuracyNote}`,
     changeHistory: [
       {
         version: 1,
@@ -1147,6 +1422,7 @@ export function applyPartialPlanEdit(existingPlan, editPayload = {}) {
   const base = existingPlan && Array.isArray(existingPlan.meals) && Array.isArray(existingPlan.days)
     ? structuredClone(existingPlan)
     : buildAdaptivePlan(existingPlan?.profileSnapshot || {});
+  base.safetyFlags = userSafetyFlags(base.safetyFlags);
 
   const instruction = str(editPayload.instruction || editPayload.prompt || '', 500);
   const lower = instruction.toLowerCase();
