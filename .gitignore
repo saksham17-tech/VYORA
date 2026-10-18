@@ -37,3 +37,7 @@ coverage/
 artifacts/file_generation/ttl=63d/intermediate/
 dist/
 build/
+
+
+render.yaml
+DockerFile
