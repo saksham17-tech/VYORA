@@ -19,11 +19,45 @@ function component(foodId, baseQty = 1, unit) {
 function dish(id, name, slots, diets, allergens, cuisine, mainProtein, entries, options = {}) {
   const components = entries.map(entry => component(entry[0], entry[1], entry[2]));
   const fixedUnits = components.some(item => /egg|roti|slice|fruit|cake/i.test(item.unit));
-  const defaultAddOns = diets.includes('keto')
-    ? [['cucumber', 0.5], ['cheese', 0.5]]
-    : diets.includes('vegan')
-    ? [['berries', 0.75], ['roastedchana', 1], ['avocado', 0.5]]
-    : [['hungcurd', 1], ['berries', 0.75], ['roastedchana', 1]];
+  const componentIds = new Set(components.map(item => item.foodId));
+  const slot = slots[0];
+  const curatedAddOns = options.addOns || (
+    slot === 'Breakfast'
+      ? (diets.includes('vegan')
+        ? [['berries', 0.5], ['banana', 0.5], ['pumpkinseeds', 0.25]]
+        : [['berries', 0.5], ['hungcurd', 0.5], ['walnuts', 0.25]])
+      : slot === 'Snack'
+        ? (diets.includes('vegan')
+          ? [['berries', 0.5], ['banana', 0.5], ['pumpkinseeds', 0.25]]
+          : [['berries', 0.5], ['guava', 0.5], ['walnuts', 0.25]])
+        : /rice|pulao|quinoa|millet|roti|roti|dal|curry|rajma|chole|khichdi/i.test(name)
+          ? (diets.includes('vegan')
+            ? [['tomato', 0.5], ['avocado', 0.5], ['cucumber', 0.5]]
+            : [['hungcurd', 0.5], ['tomato', 0.5], ['cucumber', 0.5]])
+          : [['cucumber', 0.5], ['tomato', 0.5]]
+  ).filter(([foodId]) => !componentIds.has(foodId));
+  const fruitIds = new Set(['banana', 'apple', 'orange', 'berries', 'mango', 'papaya', 'guava', 'kiwi']);
+  const filteredAddOns = curatedAddOns.filter(([foodId]) =>
+    !componentIds.has(foodId) && (slot === 'Breakfast' || slot === 'Snack' || !fruitIds.has(foodId)));
+  if (!filteredAddOns.length) {
+    const fallbackIds = slot === 'Breakfast' || slot === 'Snack'
+      ? ['berries', 'banana', 'pumpkinseeds']
+      : (diets.includes('vegan') ? ['avocado', 'roastedchana', 'pumpkinseeds'] : ['hungcurd', 'avocado', 'roastedchana']);
+    for (const foodId of fallbackIds) {
+      if (!componentIds.has(foodId) && (!diets.includes('vegan') || !['hungcurd', 'cheese'].includes(foodId))) {
+        filteredAddOns.push([foodId, foodId === 'chapati' ? 1 : 0.5]);
+        break;
+      }
+    }
+  }
+  const staple = options.staple || (
+    ['rice', 'brownrice', 'quinoa', 'millet', 'jowar', 'bajra', 'chapati', 'sourdough',
+      'poha', 'upma', 'dosa', 'idli', 'caulirice', 'zucchini'].find(id => componentIds.has(id)) || null
+  );
+  const veg = options.veg || (
+    ['spinach', 'broccoli', 'mushroom', 'cucumber', 'tomato', 'capsicum', 'okra', 'beans',
+      'cauliflower', 'zucchini', 'kale', 'eggplant', 'peas', 'cabbage'].find(id => componentIds.has(id)) || null
+  );
   return {
     id,
     name,
@@ -32,10 +66,12 @@ function dish(id, name, slots, diets, allergens, cuisine, mainProtein, entries, 
     allergens,
     cuisine,
     mainProtein,
+    staple,
+    veg,
     components,
     scaleMin: options.scaleMin ?? (fixedUnits ? 0.9 : 0.75),
     scaleMax: options.scaleMax ?? (fixedUnits ? 1.1 : 1.75),
-    addOns: (options.addOns || defaultAddOns)
+    addOns: filteredAddOns
       .filter(([foodId]) => foodId !== 'fruit')
       .map(([foodId, baseQty, unit]) => component(foodId, baseQty, unit)),
     prepNotes: options.prepNotes || `Prepare ${name.toLowerCase()} with measured portions and serve fresh.`
@@ -267,6 +303,38 @@ const ketoSnackExpansion = [
   ['keto-cheese-avocado-snack', 'Cheese Avocado Bites', ['keto'], ['dairy'], 'international', null, [['cheese', 0.75], ['avocado', 0.5]]]
 ];
 
+const ketoIndianExpansion = [
+  ['keto-methi-chicken', 'Methi Chicken with Sautéed Greens', ['keto', 'nonveg'], [], 'north-indian', 'chicken', [['chicken', 1.5], ['spinach', 1], ['ghee', 1]]],
+  ['keto-fish-tikka', 'Fish Tikka with Cucumber Salad', ['keto', 'nonveg'], ['fish'], 'north-indian', 'rohu', [['rohu', 1.5], ['cucumber', 1], ['oliveoil', 1]]],
+  ['keto-mushroom-pepper-fry', 'Mushroom Pepper Fry with Paneer', ['keto', 'veg'], ['dairy'], 'south-indian', 'paneer', [['mushroom', 1], ['paneer', 1], ['coconut', 0.5]]],
+  ['keto-palak-paneer-no-rice', 'Palak Paneer without Rice', ['keto', 'veg'], ['dairy'], 'north-indian', 'paneer', [['paneer', 1.5], ['spinach', 1], ['ghee', 1]]],
+  ['keto-egg-cauliflower-mash', 'Egg Curry with Cauliflower Mash', ['keto', 'nonveg'], ['eggs'], 'north-indian', 'egg', [['egg', 3], ['cauliflower', 1.5], ['ghee', 1]]],
+  ['keto-paneer-tikka-mint', 'Paneer Tikka with Mint Chutney', ['keto', 'veg'], ['dairy'], 'north-indian', 'paneer', [['paneer', 1.5], ['cucumber', 1], ['oliveoil', 1]]],
+  ['keto-masala-omelette', 'Masala Omelette with Sautéed Spinach', ['keto', 'nonveg'], ['eggs'], 'north-indian', 'egg', [['egg', 3], ['spinach', 1], ['capsicum', 1]]],
+  ['keto-coconut-chia-pudding', 'Coconut Chia Pudding with Berries', ['keto', 'vegan'], [], 'south-indian', null, [['chia', 1], ['coconutMilk', 1], ['berries', 0.5]]]
+];
+
+const ketoVarietyExpansion = [
+  ['keto-paneer-mushroom-dinner', 'Paneer Mushroom Pepper Fry', ['keto', 'veg'], ['dairy'], 'north-indian', 'paneer', [['paneer', 1.25], ['mushroom', 1], ['ghee', 1]]],
+  ['keto-egg-spinach-dinner', 'Egg Curry with Spinach', ['keto', 'nonveg'], ['eggs'], 'north-indian', 'egg', [['egg', 3], ['spinach', 1], ['ghee', 1]]],
+  ['keto-tofu-cucumber-dinner', 'Tofu with Cucumber Salad', ['keto', 'vegan'], ['soy'], 'international', 'tofu', [['tofu', 1.5], ['cucumber', 1], ['oliveoil', 1]]],
+  ['keto-chicken-broccoli-dinner', 'Tandoori Chicken with Broccoli', ['keto', 'nonveg'], [], 'north-indian', 'chicken', [['chicken', 1.5], ['broccoli', 0.75], ['ghee', 1]]],
+  ['keto-tempeh-mushroom-dinner', 'Tempeh Mushroom Stir-Fry', ['keto', 'vegan'], ['soy'], 'international', 'tempeh', [['tempeh', 1.25], ['mushroom', 1], ['oliveoil', 1]]],
+  ['keto-paneer-cucumber-lunch', 'Paneer Tikka with Cucumber Salad', ['keto', 'veg'], ['dairy'], 'north-indian', 'paneer', [['paneer', 1.25], ['cucumber', 1], ['ghee', 1]]],
+  ['keto-chicken-capsicum-lunch', 'Chicken Capsicum Saute', ['keto', 'nonveg'], [], 'north-indian', 'chicken', [['chicken', 1.5], ['capsicum', 0.5], ['ghee', 1]]],
+  ['keto-egg-mushroom-lunch', 'Egg Mushroom Masala', ['keto', 'nonveg'], ['eggs'], 'north-indian', 'egg', [['egg', 3], ['mushroom', 1], ['ghee', 1]]]
+  ,['keto-paneer-kale-dinner', 'Paneer with Kale and Ghee', ['keto', 'veg'], ['dairy'], 'north-indian', 'paneer', [['paneer', 2], ['kale', 0.5], ['ghee', 1]]]
+  ,['keto-tofu-spinach-dinner', 'Tofu with Spinach and Sesame', ['keto', 'vegan'], ['soy', 'sesame'], 'international', 'tofu', [['tofu', 2], ['spinach', 1], ['tahini', 0.25]]]
+  ,['keto-tofu-ghee-dinner', 'Tofu with Garlic Ghee', ['keto', 'vegan'], ['soy'], 'international', 'tofu', [['tofu', 2], ['ghee', 1]]]
+  ,['keto-paneer-ghee-dinner', 'Paneer with Garlic Ghee', ['keto', 'veg'], ['dairy'], 'north-indian', 'paneer', [['paneer', 2], ['ghee', 1]]]
+  ,['keto-egg-ghee-dinner', 'Masala Eggs with Garlic Ghee', ['keto', 'nonveg'], ['eggs'], 'north-indian', 'egg', [['egg', 4], ['ghee', 1]]]
+  ,['keto-chicken-ghee-dinner', 'Tandoori Chicken with Garlic Ghee', ['keto', 'nonveg'], [], 'north-indian', 'chicken', [['chicken', 1.75], ['ghee', 1]]]
+  ,['keto-egg-ghee-lunch', 'Masala Eggs with Garlic Ghee Lunch', ['keto', 'nonveg'], ['eggs'], 'north-indian', 'egg', [['egg', 4], ['ghee', 1]]]
+  ,['keto-tofu-ghee-lunch', 'Tofu with Garlic Ghee Lunch', ['keto', 'vegan'], ['soy'], 'international', 'tofu', [['tofu', 2], ['ghee', 1]]]
+  ,['keto-paneer-ghee-lunch', 'Paneer with Garlic Ghee Lunch', ['keto', 'veg'], ['dairy'], 'north-indian', 'paneer', [['paneer', 2], ['ghee', 1]]]
+  ,['keto-chicken-ghee-lunch', 'Tandoori Chicken with Garlic Ghee Lunch', ['keto', 'nonveg'], [], 'north-indian', 'chicken', [['chicken', 1.75], ['ghee', 1]]]
+];
+
 const lightSnackExpansion = [
   ['veg-apple-curd-snack', 'Apple with Curd', ['veg'], ['dairy'], 'international', null, [['apple', 1], ['hungcurd', 0.5]]],
   ['vegan-apple-berries-snack', 'Apple and Berry Bowl', ['vegan'], [], 'international', null, [['apple', 1], ['berries', 0.5]]],
@@ -276,6 +344,14 @@ const lightSnackExpansion = [
   ,['veg-apple-cucumber-snack', 'Apple Cucumber Chaat', ['veg', 'vegan'], [], 'international', null, [['apple', 1], ['cucumber', 1]]]
   ,['veg-banana-curd-snack', 'Banana with Curd', ['veg'], ['dairy'], 'international', null, [['banana', 0.75], ['hungcurd', 0.5]]]
   ,['veg-berries-snack', 'Seasonal Berry Bowl', ['veg', 'vegan'], [], 'international', null, [['berries', 1]]]
+];
+
+const ketoSnackVariety = [
+  ['keto-egg-avocado-snack', 'Egg Avocado Bites', ['keto', 'nonveg'], ['eggs'], 'international', null, [['egg', 2], ['avocado', 0.5]]],
+  ['keto-tofu-olive-snack', 'Tofu Olive Bites', ['keto', 'vegan'], ['soy'], 'international', null, [['tofu', 0.75], ['oliveoil', 0.5]]],
+  ['keto-paneer-cucumber-snack-2', 'Paneer Cucumber Cups', ['keto', 'veg'], ['dairy'], 'international', null, [['paneer', 0.75], ['cucumber', 1]]],
+  ['keto-chicken-cucumber-snack-2', 'Chicken Cucumber Bites', ['keto', 'nonveg'], [], 'international', null, [['chicken', 0.5], ['cucumber', 1]]],
+  ['keto-egg-spinach-snack', 'Egg Spinach Bites', ['keto', 'nonveg'], ['eggs'], 'international', null, [['egg', 2], ['spinach', 1]]]
 ];
 
 const definitions = [
@@ -299,7 +375,25 @@ const definitions = [
     [id, name, ['Snack'], diets, allergens, cuisine, mainProtein, entries, options]),
   ...ketoSnackExpansion.map(([id, name, diets, allergens, cuisine, mainProtein, entries, options]) =>
     [id, name, ['Snack'], diets, allergens, cuisine, mainProtein, entries, options]),
+  ...ketoIndianExpansion.slice(0, 1).map(([id, name, diets, allergens, cuisine, mainProtein, entries, options]) =>
+    [id, name, ['Dinner'], diets, allergens, cuisine, mainProtein, entries, options]),
+  ...ketoIndianExpansion.slice(1, 4).map(([id, name, diets, allergens, cuisine, mainProtein, entries, options]) =>
+    [id, name, ['Lunch'], diets, allergens, cuisine, mainProtein, entries, options]),
+  ...ketoIndianExpansion.slice(4, 7).map(([id, name, diets, allergens, cuisine, mainProtein, entries, options]) =>
+    [id, name, ['Dinner'], diets, allergens, cuisine, mainProtein, entries, options]),
+  ...ketoIndianExpansion.slice(7).map(([id, name, diets, allergens, cuisine, mainProtein, entries, options]) =>
+    [id, name, ['Breakfast'], diets, allergens, cuisine, mainProtein, entries, options]),
+  ...ketoVarietyExpansion.slice(0, 5).map(([id, name, diets, allergens, cuisine, mainProtein, entries, options]) =>
+    [id, name, ['Dinner'], diets, allergens, cuisine, mainProtein, entries, options]),
+  ...ketoVarietyExpansion.slice(8, 10).map(([id, name, diets, allergens, cuisine, mainProtein, entries, options]) =>
+    [id, name, ['Dinner'], diets, allergens, cuisine, mainProtein, entries, options]),
+  ...ketoVarietyExpansion.slice(10).map(([id, name, diets, allergens, cuisine, mainProtein, entries, options]) =>
+    [id, name, ['Lunch'], diets, allergens, cuisine, mainProtein, entries, options]),
+  ...ketoVarietyExpansion.slice(5, 8).map(([id, name, diets, allergens, cuisine, mainProtein, entries, options]) =>
+    [id, name, ['Lunch'], diets, allergens, cuisine, mainProtein, entries, options]),
   ...lightSnackExpansion.map(([id, name, diets, allergens, cuisine, mainProtein, entries, options]) =>
+    [id, name, ['Snack'], diets, allergens, cuisine, mainProtein, entries, options]),
+  ...ketoSnackVariety.map(([id, name, diets, allergens, cuisine, mainProtein, entries, options]) =>
     [id, name, ['Snack'], diets, allergens, cuisine, mainProtein, entries, options]),
   ...Object.entries(ketoPoolExpansion).flatMap(([slot, entries]) => withSlot(slot, entries))
 ];

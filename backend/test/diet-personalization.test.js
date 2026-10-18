@@ -208,6 +208,39 @@ test('nonveg plans prioritize meat or fish mains without excessive fish', () => 
   }
 });
 
+test('enforces curated add-ons and same-day keto and meal variety rules', () => {
+  const keto = buildAdaptivePlan({ diet: 'keto', goal: 'general' });
+  let weeklyCheeseMeals = 0;
+  let weeklySalmonMeals = 0;
+  for (const day of PLAN_DAYS) {
+    const meals = keto.meals.filter(meal => meal.day === day);
+    const cheeseMeals = meals.filter(meal => meal.foodIds.includes('cheese'));
+    assert.ok(cheeseMeals.length <= 1);
+    weeklyCheeseMeals += cheeseMeals.length;
+    weeklySalmonMeals += meals.filter(meal => meal.foodIds.includes('salmon')).length;
+    assert.equal(meals.some(meal =>
+      meal.slot === 'Snack' && meal.foodIds.some(id => ['salmon', 'rohu', 'prawns'].includes(id))), false);
+    const lunch = meals.find(meal => meal.slot === 'Lunch');
+    const dinner = meals.find(meal => meal.slot === 'Dinner');
+    const lunchDish = dishLibrary.find(dish => dish.id === lunch.dishId);
+    const dinnerDish = dishLibrary.find(dish => dish.id === dinner.dishId);
+    assert.notEqual(lunch.mainProtein, dinner.mainProtein);
+    if (lunchDish.staple && dinnerDish.staple) assert.notEqual(lunchDish.staple, dinnerDish.staple);
+    if (lunchDish.veg && dinnerDish.veg) assert.notEqual(lunchDish.veg, dinnerDish.veg);
+    assert.notEqual(meals[0].mainProtein, meals[1].mainProtein);
+  }
+  assert.ok(weeklyCheeseMeals <= 3);
+  assert.ok(weeklySalmonMeals <= 2);
+
+  for (const dish of dishLibrary) {
+    assert.ok(dish.addOns.length >= 1 && dish.addOns.length <= 3, `${dish.id} add-ons are not curated`);
+    for (const addOn of dish.addOns) {
+      const fruit = ['banana', 'apple', 'orange', 'berries', 'mango', 'papaya', 'guava', 'kiwi'].includes(addOn.foodId);
+      if (fruit) assert.ok(dish.slots.includes('Breakfast') || dish.slots.includes('Snack'), `${dish.id} has a meal fruit add-on`);
+    }
+  }
+});
+
 test('is deterministic and applies the underweight fat-loss safety guard', () => {
   const input = {
     heightCm: 180, weightKg: 55, age: 28, gender: 'female',

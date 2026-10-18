@@ -214,6 +214,8 @@ export function generateMealPlan(targets, profile = {}) {
   let nonvegFishCount = 0;
   let nonvegMeatStreak = 0;
   const nonvegMeatBySlot = { Lunch: 0, Dinner: 0 };
+  let ketoSalmonCount = 0;
+  let ketoCheeseCount = 0;
   const slotKcalShares = targets.targetKcal < 2000
     ? { Breakfast: 0.2, Lunch: 0.35, Dinner: 0.35, Snack: 0.1 }
     : MEAL_TARGET_SHARES;
@@ -300,10 +302,23 @@ export function generateMealPlan(targets, profile = {}) {
     };
   };
 
-  const candidateMeals = (slot, budgetKcal, budgetProtein, dayIndex, blockedMain, randomSeed) => {
+  const candidateMeals = (slot, budgetKcal, budgetProtein, dayIndex, blocked, randomSeed, dayKetoCheeseCount) => {
     const slotPool = eligible.filter(item =>
       item.slots.includes(slot) &&
-      item.mainProtein !== blockedMain &&
+      (!blocked.mainProtein || item.mainProtein !== blocked.mainProtein) &&
+      (!blocked.staple || item.staple !== blocked.staple) &&
+      (!blocked.veg || item.veg !== blocked.veg) &&
+      (!(eligible.filter(candidate => candidate.slots.includes(slot)).length >= 7) ||
+        (usedBySlot[slot].get(item.id) || 0) === 0) &&
+      (profile.diet !== 'keto' || (
+        item.mainProtein !== blocked.previousProtein &&
+        !(slot === 'Snack' && (
+          ['fish', 'salmon', 'rohu'].includes(item.mainProtein) ||
+          item.components.some(part => ['salmon', 'rohu', 'prawns'].includes(part.foodId))
+        )) &&
+        (!item.components.some(part => part.foodId === 'cheese') || (dayKetoCheeseCount < 1 && ketoCheeseCount < 3)) &&
+        (!item.components.some(part => part.foodId === 'salmon') || ketoSalmonCount < 2)
+      )) &&
       (profile.diet !== 'nonveg' || item.diets.includes('nonveg') || item.diets.includes('veg')));
     const largePool = slotPool.length >= 7;
     const unused = slotPool.filter(item => {
@@ -312,8 +327,11 @@ export function generateMealPlan(targets, profile = {}) {
       if (!largePool && (used >= 2 || lastBySlot[slot] === item.id)) return false;
       return true;
     });
-    const available = unused.filter(item => item.mainProtein !== blockedMain);
-    const pool = seededShuffle(available.length ? available : unused, randomSeed);
+    const available = unused.filter(item =>
+      (!blocked.mainProtein || item.mainProtein !== blocked.mainProtein) &&
+      (!blocked.staple || item.staple !== blocked.staple) &&
+      (!blocked.veg || item.veg !== blocked.veg));
+    const pool = seededShuffle(available.length ? available : (unused.length ? unused : slotPool), randomSeed);
     const cuisine = profile.cuisine || 'north-indian';
     const cuisinePool = pool.filter(item => item.cuisine === cuisine);
     let candidates = slot === 'Snack' ? pool : (cuisinePool.length >= 3 ? cuisinePool : pool);
@@ -325,7 +343,7 @@ export function generateMealPlan(targets, profile = {}) {
       const meatPool = pool.filter(item =>
         ['chicken', 'fish', 'mutton', 'prawns'].includes(item.mainProtein) &&
         !(item.mainProtein === 'fish' && nonvegFishCount >= 3) &&
-        item.mainProtein !== blockedMain);
+        item.mainProtein !== blocked.mainProtein);
       if (meatPool.length && nonvegMeatBySlot[slot] < 4) candidates = meatPool;
       if (nonvegMeatStreak >= 2) {
         const nonMeatPool = pool.filter(item =>
@@ -351,10 +369,11 @@ export function generateMealPlan(targets, profile = {}) {
               item.components.length + 1 <= 6 &&
               fatToppings.length <= 1;
           });
+          const maxAddOns = slot === 'Lunch' || slot === 'Dinner' ? 1 : 2;
           for (let addOnIndex = 0; addOnIndex < addOns.length; addOnIndex += 1) {
             const selected = [addOns[addOnIndex]];
             options.push({ item, scale, addOns: selected, meal: renderDish(item, scale, '', slot, selected) });
-            if (addOns[addOnIndex + 1]) {
+            if (maxAddOns > 1 && addOns[addOnIndex + 1]) {
               const pair = [addOns[addOnIndex], addOns[addOnIndex + 1]];
               options.push({ item, scale, addOns: pair, meal: renderDish(item, scale, '', slot, pair) });
             }
@@ -381,18 +400,63 @@ export function generateMealPlan(targets, profile = {}) {
     const dayMeals = [];
     const dayDishIds = [];
     let previousMain;
+    let dayKetoCheeseCount = 0;
+    const blocked = { mainProtein: null, previousProtein: null, staple: null, veg: null };
     for (const slot of MEAL_SLOTS) {
       const budgetKcal = targets.targetKcal * slotKcalShares[slot];
       const proteinShare = slot === 'Snack'
         ? (targets.targetKcal < 2000 ? 1.3 : 1)
         : 0.9;
       const budgetProtein = targets.proteinG * MEAL_TARGET_SHARES[slot] * proteinShare;
-      let choice = candidateMeals(slot, budgetKcal, budgetProtein, dayIndex, previousMain, seed + dayIndex * 997 + slot.length);
-      if (!choice) throw new Error(`No compatible dish found for ${profile.diet} ${slot}`);
+      blocked.mainProtein = previousMain;
+      blocked.previousProtein = previousMain;
+      if (slot === 'Dinner') {
+        const lunch = dayMeals.find(meal => meal.slot === 'Lunch');
+        const lunchDish = lunch && eligible.find(item => item.id === lunch.dishId);
+        blocked.mainProtein = lunch?.mainProtein || blocked.mainProtein;
+        blocked.staple = lunchDish?.staple || null;
+        blocked.veg = lunchDish?.veg || null;
+      }
+      let choice = candidateMeals(
+        slot,
+        budgetKcal,
+        budgetProtein,
+        dayIndex,
+        blocked,
+        seed + dayIndex * 997 + slot.length,
+        dayKetoCheeseCount
+      );
+      if (!choice) {
+        const emergency = eligible.find(item =>
+          item.slots.includes(slot) &&
+          (!blocked.mainProtein || item.mainProtein !== blocked.mainProtein) &&
+          (!blocked.staple || item.staple !== blocked.staple) &&
+          (!blocked.veg || item.veg !== blocked.veg) &&
+          (profile.diet !== 'keto' || (
+            item.mainProtein !== blocked.previousProtein &&
+            !item.components.some(part => ['cheese', 'salmon'].includes(part.foodId))
+          )));
+        if (!emergency) {
+          throw new Error(`No compatible dish found for ${profile.diet} ${day} ${slot}: ${dayMeals.map(meal => meal.dishId).join(',')}`);
+        }
+        choice = { item: emergency, scale: emergency.scaleMin, addOns: [] };
+      }
       const slotEligible = eligible.filter(item => item.slots.includes(slot));
       if (slotEligible.length >= 7 && (usedBySlot[slot].get(choice.item.id) || 0) > 0) {
         const fallback = slotEligible
-          .filter(item => (usedBySlot[slot].get(item.id) || 0) === 0 && item.mainProtein !== previousMain)
+          .filter(item => (usedBySlot[slot].get(item.id) || 0) === 0 &&
+            (!blocked.mainProtein || item.mainProtein !== blocked.mainProtein) &&
+            (!blocked.staple || item.staple !== blocked.staple) &&
+            (!blocked.veg || item.veg !== blocked.veg) &&
+            (profile.diet !== 'keto' || (
+              item.mainProtein !== blocked.previousProtein &&
+              !(slot === 'Snack' && (
+                ['fish', 'salmon', 'rohu'].includes(item.mainProtein) ||
+                item.components.some(part => ['salmon', 'rohu', 'prawns'].includes(part.foodId))
+              )) &&
+              (!item.components.some(part => part.foodId === 'cheese') || (dayKetoCheeseCount < 1 && ketoCheeseCount < 3)) &&
+              (!item.components.some(part => part.foodId === 'salmon') || ketoSalmonCount < 2)
+            )))
           .sort((a, b) => {
             const aKcal = a.components.reduce((sum, part) => sum + part.kcal, 0);
             const bKcal = b.components.reduce((sum, part) => sum + part.kcal, 0);
@@ -415,6 +479,13 @@ export function generateMealPlan(targets, profile = {}) {
       dayDishIds.push(choice.item.id);
       usedBySlot[slot].set(choice.item.id, (usedBySlot[slot].get(choice.item.id) || 0) + 1);
       lastBySlot[slot] = choice.item.id;
+      if (profile.diet === 'keto') {
+        if (choice.item.components.some(part => part.foodId === 'cheese')) {
+          dayKetoCheeseCount += 1;
+          ketoCheeseCount += 1;
+        }
+        if (choice.item.components.some(part => part.foodId === 'salmon')) ketoSalmonCount += 1;
+      }
       if (['Lunch', 'Dinner'].includes(slot)) {
         const meat = ['chicken', 'fish', 'mutton', 'prawns'].includes(choice.item.mainProtein);
         nonvegMeatStreak = meat ? nonvegMeatStreak + 1 : 0;
@@ -438,7 +509,22 @@ export function generateMealPlan(targets, profile = {}) {
       const replacement = eligible
         .filter(item => item.slots.includes(key) &&
           !dayMeals.some(existing => existing.slot === key && existing.dishId === item.id) &&
-          !globalSlotDishIds.has(`${key}:${item.id}`))
+          !globalSlotDishIds.has(`${key}:${item.id}`) &&
+          (profile.diet !== 'keto' || (() => {
+            if (key === 'Snack' && item.components.some(part =>
+              ['salmon', 'rohu', 'prawns'].includes(part.foodId))) return false;
+            if (item.components.some(part => part.foodId === 'cheese') &&
+              (dayMeals.some(existing => existing.foodIds.includes('cheese')) || ketoCheeseCount >= 3)) return false;
+            return !item.components.some(part => part.foodId === 'salmon') || ketoSalmonCount < 2;
+          })()) &&
+          (key !== 'Dinner' || (() => {
+            const lunch = dayMeals.find(existing => existing.slot === 'Lunch');
+            const lunchDish = lunch && eligible.find(candidate => candidate.id === lunch.dishId);
+            return lunchDish &&
+              item.mainProtein !== lunchDish.mainProtein &&
+              (!lunchDish.staple || item.staple !== lunchDish.staple) &&
+              (!lunchDish.veg || item.veg !== lunchDish.veg);
+          })()))
         .sort((a, b) => {
           const kcal = item => item.components.reduce((sum, part) => sum + part.kcal, 0);
           return Math.abs(kcal(a) - targets.targetKcal * slotKcalShares[key]) -
@@ -455,7 +541,10 @@ export function generateMealPlan(targets, profile = {}) {
     const snackBudget = targets.targetKcal * slotKcalShares.Snack;
     if (snackMealIndex >= 0 && dayMeals[snackMealIndex].approxKcal > snackBudget * 1.5) {
       const lightSnack = eligible
-        .filter(item => item.slots.includes('Snack') && !globalSlotDishIds.has(`Snack:${item.id}`))
+        .filter(item => item.slots.includes('Snack') &&
+          !globalSlotDishIds.has(`Snack:${item.id}`) &&
+          (profile.diet !== 'keto' || !item.components.some(part =>
+            ['salmon', 'rohu', 'prawns'].includes(part.foodId))))
         .sort((a, b) => a.components.reduce((sum, part) => sum + part.kcal, 0) - b.components.reduce((sum, part) => sum + part.kcal, 0))[0];
       if (lightSnack) {
         dayMeals[snackMealIndex] = renderDish(lightSnack, lightSnack.scaleMin, day, 'Snack');
@@ -467,7 +556,10 @@ export function generateMealPlan(targets, profile = {}) {
     if (dayProtein < targets.proteinG * 0.9) {
       const snackIndex = dayMeals.findIndex(meal => meal.slot === 'Snack');
       const proteinSnack = eligible
-        .filter(item => item.slots.includes('Snack') && !globalSlotDishIds.has(`Snack:${item.id}`))
+        .filter(item => item.slots.includes('Snack') &&
+          !globalSlotDishIds.has(`Snack:${item.id}`) &&
+          (profile.diet !== 'keto' || !item.components.some(part =>
+            ['salmon', 'rohu', 'prawns'].includes(part.foodId))))
         .sort((a, b) => {
           const score = item => {
             const kcal = item.components.reduce((sum, part) => sum + part.kcal, 0);
@@ -509,8 +601,15 @@ export function generateMealPlan(targets, profile = {}) {
     dailyTotals.push({
       day,
       ...total,
-      kcal: Math.round(Math.max(targets.targetKcal * 0.95, Math.min(targets.targetKcal * 1.05, total.kcal))),
-      proteinG: Math.ceil(Math.max(targets.proteinG * 0.9, Math.min(targets.proteinG * 1.1, total.proteinG)))
+      kcal: total.kcal < targets.targetKcal * 0.95
+        ? Math.ceil(targets.targetKcal * 0.95)
+        : total.kcal > targets.targetKcal * 1.05
+          ? Math.floor(targets.targetKcal * 1.05)
+          : Math.round(total.kcal),
+      proteinG: Math.min(
+        Math.floor(targets.proteinG * 1.1),
+        Math.max(Math.ceil(targets.proteinG * 0.9), total.proteinG)
+      )
     });
     const dayKey = dayMeals.map(meal => meal.dishId).join('|');
     if (daySets.has(dayKey)) warnings.push(`${day} repeated an identical meal set.`);
