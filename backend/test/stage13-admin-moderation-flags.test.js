@@ -10,6 +10,11 @@ process.env.VYORA_NO_LISTEN = '1';
 process.env.VYORA_NO_CRON = '1';
 process.env.DATABASE_PATH = './database/test_stage13.sqlite';
 
+// Ensure a clean DB file before the server module opens it (avoids cross-run state).
+for (const suffix of ['', '-wal', '-shm']) {
+  try { fs.rmSync(`./database/test_stage13.sqlite${suffix}`, { force: true }); } catch {}
+}
+
 const { app } = await import('../src/server.js');
 
 let server;

@@ -133,7 +133,33 @@
               <label><input type="checkbox" value="fish"> Fish</label>
             </div>
           </div>
-          <div class="field"><label>&nbsp;</label><button class="btn" id="pGenerate" style="width:100%;">Generate my plan</button></div>
+                    <div class="field"><label for="pExperience">Training experience</label>
+            <select id="pExperience" style="width:100%;">
+              <option value="beginner">Beginner</option>
+              <option value="intermediate">Intermediate</option>
+              <option value="advanced">Advanced</option>
+            </select>
+          </div>
+          <div class="field"><label for="pDaysPerWeek">Training days / week</label>
+            <select id="pDaysPerWeek" style="width:100%;">
+              <option value="3">3 days</option>
+              <option value="4" selected>4 days</option>
+              <option value="5">5 days</option>
+              <option value="6">6 days</option>
+            </select>
+          </div>
+          <div class="field"><label for="pEquipment">Equipment</label>
+            <select id="pEquipment" style="width:100%;">
+              <option value="none">Bodyweight only</option>
+              <option value="minimal" selected>Minimal (bands / backpack)</option>
+              <option value="dumbbells">Dumbbells</option>
+              <option value="full_gym">Full gym</option>
+            </select>
+          </div>
+          <div class="field"><label for="pSessionMinutes">Session length (min)</label>
+            <input id="pSessionMinutes" type="number" min="15" max="90" value="35" placeholder="e.g. 35"/>
+          </div>
+<div class="field"><label>&nbsp;</label><button class="btn" id="pGenerate" style="width:100%;">Generate my plan</button></div>
         </div>
         <p id="pFormError" class="form-error" role="alert"></p>
         <p id="pLocStatus" style="font-size:12.5px;margin:2px 0 0;"></p>

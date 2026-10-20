@@ -146,17 +146,25 @@
     if (flags.length) mealsBox.appendChild(el('p', 'plan-safety', `Safety notes: ${flags.join(' ')}`));
     mealsBox.appendChild(el('p', 'bottom-note', plan.estimateMetadata?.disclaimer || 'Calorie and macro estimates are approximate.'));
 
-    workoutSummary.textContent = flags.join(' ');
+    workoutSummary.textContent = [
+      flags.join(' '),
+      plan.weeklyProgressionNote || ''
+    ].filter(Boolean).join(' ');
     workoutDaysBox.replaceChildren();
     (plan.days || []).forEach((d, idx) => {
       const row = el('div', 'exrow');
       if (idx === plan.days.length - 1) row.style.border = 'none';
-      const dayLabel = el('div', 'exname', `${d.day} (${d.durationMin || 30}m · ${d.environment || 'flexible'})`);
+      const dayLabel = el('div', 'exname', `${d.day} · ${d.focus || ''} (${d.durationMin || 30}m · ${d.environment || 'flexible'})`);
+      const warm = d.warmUp ? el('div', 'exmeta', `Warm-up: ${d.warmUp}`) : null;
       const exSummary = Array.isArray(d.exercises)
-        ? d.exercises.map(e => `${e.name} [${e.prescription}]`).join(' · ')
+        ? d.exercises.map(e => `${e.name} [${e.prescription}${e.intensityRpe ? ` · ${e.intensityRpe}` : ''}]`).join(' · ')
         : String(d.focus || d);
-      const dayMeta = el('div', 'exmeta', `${d.focus}: ${exSummary}`);
-      row.append(dayLabel, dayMeta);
+      const dayMeta = el('div', 'exmeta', exSummary);
+      const cool = d.coolDown ? el('div', 'exmeta', `Cool-down: ${d.coolDown}`) : null;
+      row.append(dayLabel);
+      if (warm) row.appendChild(warm);
+      row.appendChild(dayMeta);
+      if (cool) row.appendChild(cool);
       workoutDaysBox.appendChild(row);
     });
 
@@ -237,6 +245,10 @@
     }
     formError.textContent = '';
     const activityLevel = document.getElementById('pActivity').value;
+    const experience = document.getElementById('pExperience')?.value || 'beginner';
+    const daysPerWeek = Number(document.getElementById('pDaysPerWeek')?.value || 4);
+    const equipment = document.getElementById('pEquipment')?.value || 'minimal';
+    const sessionMinutes = Number(document.getElementById('pSessionMinutes')?.value || 35);
     const cuisine = document.getElementById('pCuisine').value;
     const allergies = [...document.querySelectorAll('#pAllergies input:checked')].map(input => input.value);
     const generateButton = document.getElementById('pGenerate');
@@ -279,6 +291,10 @@
           diet,
           goal,
           activityLevel,
+          experience,
+          daysPerWeek,
+          equipment,
+          sessionMinutes,
           allergies,
           cuisine,
           planType: 'combined'

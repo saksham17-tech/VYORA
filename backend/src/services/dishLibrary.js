@@ -157,7 +157,6 @@ const dinner = [
   ['veg-khichdi', 'Vegetable Khichdi with Curd', ['veg'], ['dairy'], 'north-indian', 'moong', [['moong', 1], ['rice', 1], ['hungcurd', 0.75]]],
   ['veg-paneer-quinoa', 'Paneer Quinoa Bowl with Roasted Vegetables', ['veg'], ['dairy'], 'international', 'paneer', [['paneer', 1], ['quinoa', 1], ['cauliflower', 1]]],
   ['veg-mushroom-roti', 'Mushroom Masala with 2 Rotis', ['veg', 'vegan'], ['gluten'], 'north-indian', 'mushroom', [['mushroom', 2], ['chapati', 2], ['beans', 1]]],
-  ['veg-masoor-millet', 'Masoor Dal with Millet and Bhindi', ['veg', 'vegan'], [], 'north-indian', 'masoor', [['masoor', 1], ['millet', 1], ['okra', 1]]],
   ['veg-palak-tofu', 'Palak Tofu with Brown Rice', ['veg', 'vegan'], ['soy'], 'north-indian', 'tofu', [['tofu', 1], ['brownrice', 1], ['spinach', 1]]],
   ['veg-peas-pulao-dinner', 'Peas Pulao with Raita', ['veg'], ['dairy'], 'north-indian', 'peas', [['peas', 1], ['rice', 1], ['hungcurd', 0.5]]],
   ['veg-chana-salad', 'Warm Chana Salad with Millet', ['veg', 'vegan'], [], 'international', 'chana', [['chana', 1], ['millet', 1], ['lettuce', 1]]],
@@ -234,7 +233,7 @@ const extraKetoDinner = [
 ];
 const extraKetoBreakfast = [
   ['keto-egg-cheese', 'Egg and Cheese Spinach Plate', ['keto', 'nonveg'], ['eggs', 'dairy'], 'international', 'egg', [['egg', 3], ['cheese', 1], ['spinach', 1]]],
-  ['keto-chicken-egg', 'Chicken Egg Breakfast Skillet', ['keto', 'nonveg'], ['eggs'], 'international', 'chicken', [['chicken', 1], ['egg', 2], ['spinach', 1]]],
+  ['keto-chicken-egg', 'Chicken and Egg Breakfast Skillet', ['keto', 'nonveg'], ['eggs'], 'international', 'chicken', [['chicken', 1], ['egg', 2], ['spinach', 1]]],
   ['keto-tofu-cheese-breakfast', 'Tofu Cheese Breakfast Plate', ['keto'], ['soy', 'dairy'], 'international', 'tofu', [['tofu', 1.5], ['cheese', 1], ['spinach', 1]]]
 ];
 const extraKetoLunch = [
@@ -252,17 +251,17 @@ const extraKetoDinnerTwo = [
 const ketoPoolExpansion = {
   Breakfast: [
     ['keto-egg-avocado-breakfast', 'Egg Avocado Breakfast Bowl', ['keto'], ['eggs'], 'international', 'egg', [['egg', 3], ['avocado', 0.5], ['cucumber', 1]]],
-    ['keto-paneer-egg-breakfast', 'Paneer Egg Breakfast Skillet', ['keto'], ['eggs', 'dairy'], 'north-indian', 'paneer', [['paneer', 1], ['egg', 2], ['spinach', 1]]],
+    ['keto-paneer-egg-breakfast', 'Paneer and Egg Breakfast Skillet', ['keto'], ['eggs', 'dairy'], 'north-indian', 'paneer', [['paneer', 1], ['egg', 2], ['spinach', 1]]],
     ['keto-chicken-spinach-breakfast', 'Chicken Spinach Breakfast Bowl', ['keto'], [], 'international', 'chicken', [['chicken', 1], ['spinach', 1], ['avocado', 0.5]]],
     ['keto-salmon-egg-breakfast', 'Salmon Egg Breakfast Plate', ['keto'], ['fish', 'eggs'], 'international', 'salmon', [['salmon', 0.75], ['egg', 2], ['cucumber', 1]]],
     ['keto-cheese-egg-breakfast', 'Cheese Egg Breakfast Plate', ['keto'], ['eggs', 'dairy'], 'international', 'egg', [['cheese', 1], ['egg', 3], ['cucumber', 1]]]
   ],
   Lunch: [
-    ['keto-paneer-cheese-lunch-2', 'Paneer Cheese Greens Lunch', ['keto'], ['dairy'], 'international', 'paneer', [['paneer', 1.5], ['cheese', 1], ['cucumber', 1]]],
-    ['keto-chicken-avocado-lunch-2', 'Chicken Avocado Greens Lunch', ['keto'], [], 'international', 'chicken', [['chicken', 1.5], ['avocado', 0.5], ['spinach', 1]]],
-    ['keto-egg-cheese-lunch-2', 'Egg Cheese Spinach Lunch', ['keto'], ['eggs', 'dairy'], 'international', 'egg', [['egg', 4], ['cheese', 1], ['spinach', 1]]],
-    ['keto-tofu-avocado-lunch-2', 'Tofu Avocado Greens Lunch', ['keto'], ['soy'], 'international', 'tofu', [['tofu', 1.5], ['avocado', 0.5], ['cucumber', 1]]],
-    ['keto-cheese-egg-lunch-2', 'Cheese Egg Greens Lunch', ['keto'], ['eggs', 'dairy'], 'international', 'egg', [['cheese', 1], ['egg', 3], ['spinach', 1]]]
+    ['keto-paneer-cheese-lunch-2', 'Paneer and Cheese Salad Bowl', ['keto'], ['dairy'], 'international', 'paneer', [['paneer', 1.5], ['cheese', 1], ['cucumber', 1]]],
+    ['keto-chicken-avocado-lunch-2', 'Chicken Avocado Salad Bowl', ['keto'], [], 'international', 'chicken', [['chicken', 1.5], ['avocado', 0.5], ['spinach', 1]]],
+    ['keto-egg-cheese-lunch-2', 'Egg, Cheese and Spinach Bowl', ['keto'], ['eggs', 'dairy'], 'international', 'egg', [['egg', 4], ['cheese', 1], ['spinach', 1]]],
+    ['keto-tofu-avocado-lunch-2', 'Tofu Avocado Salad Bowl', ['keto'], ['soy'], 'international', 'tofu', [['tofu', 1.5], ['avocado', 0.5], ['cucumber', 1]]],
+    ['keto-cheese-egg-lunch-2', 'Cheese and Egg Greens Bowl', ['keto'], ['eggs', 'dairy'], 'international', 'egg', [['cheese', 1], ['egg', 3], ['spinach', 1]]]
   ],
   Dinner: [
     ['keto-paneer-avocado-dinner-2', 'Paneer Avocado Dinner Plate', ['keto'], ['dairy'], 'international', 'paneer', [['paneer', 1.5], ['avocado', 0.5], ['spinach', 1]]],
@@ -327,14 +326,14 @@ const ketoVarietyExpansion = [
   ['keto-egg-mushroom-lunch', 'Egg Mushroom Masala', ['keto', 'nonveg'], ['eggs'], 'north-indian', 'egg', [['egg', 3], ['mushroom', 1], ['ghee', 1]]]
   ,['keto-paneer-kale-dinner', 'Paneer with Kale and Ghee', ['keto', 'veg'], ['dairy'], 'north-indian', 'paneer', [['paneer', 2], ['kale', 0.5], ['ghee', 1]]]
   ,['keto-tofu-spinach-dinner', 'Tofu with Spinach and Sesame', ['keto', 'vegan'], ['soy', 'sesame'], 'international', 'tofu', [['tofu', 2], ['spinach', 1], ['tahini', 0.25]]]
-  ,['keto-tofu-ghee-dinner', 'Tofu with Garlic Ghee', ['keto', 'vegan'], ['soy'], 'international', 'tofu', [['tofu', 2], ['ghee', 1]]]
-  ,['keto-paneer-ghee-dinner', 'Paneer with Garlic Ghee', ['keto', 'veg'], ['dairy'], 'north-indian', 'paneer', [['paneer', 2], ['ghee', 1]]]
-  ,['keto-egg-ghee-dinner', 'Masala Eggs with Garlic Ghee', ['keto', 'nonveg'], ['eggs'], 'north-indian', 'egg', [['egg', 4], ['ghee', 1]]]
-  ,['keto-chicken-ghee-dinner', 'Tandoori Chicken with Garlic Ghee', ['keto', 'nonveg'], [], 'north-indian', 'chicken', [['chicken', 1.75], ['ghee', 1]]]
-  ,['keto-egg-ghee-lunch', 'Masala Eggs with Garlic Ghee Lunch', ['keto', 'nonveg'], ['eggs'], 'north-indian', 'egg', [['egg', 4], ['ghee', 1]]]
-  ,['keto-tofu-ghee-lunch', 'Tofu with Garlic Ghee Lunch', ['keto', 'vegan'], ['soy'], 'international', 'tofu', [['tofu', 2], ['ghee', 1]]]
-  ,['keto-paneer-ghee-lunch', 'Paneer with Garlic Ghee Lunch', ['keto', 'veg'], ['dairy'], 'north-indian', 'paneer', [['paneer', 2], ['ghee', 1]]]
-  ,['keto-chicken-ghee-lunch', 'Tandoori Chicken with Garlic Ghee Lunch', ['keto', 'nonveg'], [], 'north-indian', 'chicken', [['chicken', 1.75], ['ghee', 1]]]
+  ,['keto-tofu-ghee-dinner', 'Garlic Ghee Tofu Bowl', ['keto', 'vegan'], ['soy'], 'international', 'tofu', [['tofu', 2], ['ghee', 1]]]
+  ,['keto-paneer-ghee-dinner', 'Garlic Ghee Paneer Bowl', ['keto', 'veg'], ['dairy'], 'north-indian', 'paneer', [['paneer', 2], ['ghee', 1]]]
+  ,['keto-egg-ghee-dinner', 'Masala Eggs in Garlic Ghee', ['keto', 'nonveg'], ['eggs'], 'north-indian', 'egg', [['egg', 4], ['ghee', 1]]]
+  ,['keto-chicken-ghee-dinner', 'Tandoori Chicken with Garlic Ghee Gravy', ['keto', 'nonveg'], [], 'north-indian', 'chicken', [['chicken', 1.75], ['ghee', 1]]]
+  ,['keto-egg-ghee-lunch', 'Masala Egg Bhurji with Garlic Ghee', ['keto', 'nonveg'], ['eggs'], 'north-indian', 'egg', [['egg', 4], ['ghee', 1]]]
+  ,['keto-tofu-ghee-lunch', 'Tofu Stir-Fry with Garlic Ghee', ['keto', 'vegan'], ['soy'], 'international', 'tofu', [['tofu', 2], ['ghee', 1]]]
+  ,['keto-paneer-ghee-lunch', 'Paneer Tikka with Garlic Ghee', ['keto', 'veg'], ['dairy'], 'north-indian', 'paneer', [['paneer', 2], ['ghee', 1]]]
+  ,['keto-chicken-ghee-lunch', 'Tandoori Chicken Thighs with Garlic Ghee', ['keto', 'nonveg'], [], 'north-indian', 'chicken', [['chicken', 1.75], ['ghee', 1]]]
 ];
 
 const lightSnackExpansion = [
@@ -646,4 +645,33 @@ for (const base of [...dishLibrary]) {
   });
 }
 
+
+// Stage nutrition: curated extreme-profile dishes (low-cal high-protein / high-cal low-protein)
+const curatedExtreme = [
+  dish('curated-greek-yogurt-bowl', 'Greek Yogurt Protein Bowl', ['Breakfast', 'Snack'], ['veg', 'nonveg'], ['dairy'], 'international', 'dairy',
+    [['greekyogurt', 1.5], ['berries', 0.5], ['pumpkinseeds', 0.25]], { scaleMin: 0.7, scaleMax: 1.8 }),
+  dish('curated-egg-white-omelette', 'Egg White Omelette with Spinach', ['Breakfast'], ['nonveg', 'keto'], ['egg'], 'international', 'egg',
+    [['eggwhite', 3], ['spinach', 1], ['paneer', 0.25]], { scaleMin: 0.75, scaleMax: 2.0 }),
+  dish('curated-soya-chunk-salad', 'Soya Chunk Salad Bowl', ['Lunch', 'Dinner'], ['veg', 'vegan'], [], 'north-indian', 'soya',
+    [['soya', 1.25], ['cucumber', 1], ['tomato', 0.5], ['cucumber', 0.5]], { scaleMin: 0.75, scaleMax: 1.9 }),
+  dish('curated-tofu-scramble', 'High-Protein Tofu Scramble', ['Breakfast', 'Lunch'], ['vegan', 'veg'], ['soy'], 'international', 'tofu',
+    [['tofu', 1.5], ['spinach', 1], ['tomato', 0.5]], { scaleMin: 0.75, scaleMax: 1.9 }),
+  dish('curated-rice-ghee-banana', 'Rice with Ghee and Banana', ['Lunch', 'Dinner'], ['veg', 'vegan'], [], 'south-indian', null,
+    [['rice', 1.5], ['ghee', 0.5], ['banana', 1]], { scaleMin: 0.8, scaleMax: 2.0 }),
+  dish('curated-roti-ghee-stack', 'Roti Stack with Ghee', ['Lunch', 'Dinner'], ['veg'], ['gluten'], 'north-indian', null,
+    [['chapati', 3], ['ghee', 0.75], ['potato', 0.75]], { scaleMin: 0.8, scaleMax: 2.0 }),
+  dish('curated-peanut-banana-toast', 'Peanut Banana Toast Energy', ['Breakfast', 'Snack'], ['veg', 'vegan'], ['nuts', 'gluten'], 'international', null,
+    [['sourdough', 2], ['peanutbutter', 1], ['banana', 1]], { scaleMin: 0.75, scaleMax: 2.0 }),
+  dish('curated-chicken-breast-light', 'Light Grilled Chicken with Salad', ['Lunch', 'Dinner'], ['nonveg', 'keto'], [], 'international', 'chicken',
+    [['chicken', 1.25], ['cucumber', 1], ['spinach', 1]], { scaleMin: 0.75, scaleMax: 1.9 }),
+  dish('curated-whey-water', 'Whey Protein Water', ['Snack'], ['veg', 'nonveg'], ['dairy'], 'international', null,
+    [['whey', 1.25]], { scaleMin: 0.75, scaleMax: 2.0 }),
+  dish('curated-dal-rice-energy', 'Dal Rice Energy Bowl', ['Lunch', 'Dinner'], ['veg', 'vegan'], [], 'north-indian', null,
+    [['moong', 1], ['rice', 1.5], ['ghee', 0.35]], { scaleMin: 0.8, scaleMax: 2.0 })
+];
+for (const item of curatedExtreme) {
+  if (!dishLibrary.some(existing => existing.id === item.id)) dishLibrary.push(item);
+}
+
 export default dishLibrary;
+

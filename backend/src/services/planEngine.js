@@ -9,11 +9,21 @@
 import { str } from '../utils/helpers.js';
 import { foodDatabase } from './foodDatabase.js';
 import { dishLibrary } from './dishLibrary.js';
+import { exerciseLibrary, matchesEquipment, isContraindicated, exercisesById } from './exerciseLibrary.js';
 
 const PLAN_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MEAL_SLOTS = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
 const MEAL_TARGET_SHARES = { Breakfast: 0.2, Lunch: 0.35, Dinner: 0.35, Snack: 0.1 };
 const GENERATOR_WARNING_PATTERN = /fallback|tolerance|library|diagnostic/i;
+/** Daily kcal band around target (±10%). */
+export const CALORIE_TOLERANCE = 0.10;
+/** Weekly average kcal must sit within ±5% of target. */
+export const WEEKLY_CALORIE_TOLERANCE = 0.05;
+/** Daily protein lower / upper ratios of target protein. */
+export const PROTEIN_MIN_RATIO = 0.85;
+export const PROTEIN_MAX_RATIO = 1.30;
+/** Protein must not exceed this share of the day's kcal. */
+export const PROTEIN_CALORIE_SHARE = 0.35;
 
 function userSafetyFlags(flags) {
   return (Array.isArray(flags) ? flags : [])
@@ -230,6 +240,7 @@ export function generateMealPlan(targets, profile = {}) {
   const nonvegMeatBySlot = { Lunch: 0, Dinner: 0 };
   let ketoSalmonCount = 0;
   let ketoCheeseCount = 0;
+  let dayKetoEggCount = 0;
   const slotKcalShares = targets.targetKcal < 2000
     ? { Breakfast: 0.2, Lunch: 0.35, Dinner: 0.35, Snack: 0.1 }
     : MEAL_TARGET_SHARES;
@@ -345,7 +356,8 @@ export function generateMealPlan(targets, profile = {}) {
           item.components.some(part => ['salmon', 'rohu', 'prawns'].includes(part.foodId))
         )) &&
         (!item.components.some(part => part.foodId === 'cheese') || (dayKetoCheeseCount < 1 && ketoCheeseCount < 3)) &&
-        (!item.components.some(part => part.foodId === 'salmon') || ketoSalmonCount < 2)
+        (!item.components.some(part => part.foodId === 'salmon') || ketoSalmonCount < 2) &&
+        (!item.components.some(part => part.foodId === 'egg' || part.foodId === 'eggwhite') || dayKetoEggCount < 2)
       )) &&
       (profile.diet !== 'nonveg' || item.diets.includes('nonveg') || item.diets.includes('veg')));
     const largePool = slotPool.length >= 7;
@@ -429,6 +441,7 @@ export function generateMealPlan(targets, profile = {}) {
     const dayDishIds = [];
     let previousMain;
     let dayKetoCheeseCount = 0;
+    dayKetoEggCount = 0;
     const blocked = { mainProtein: null, previousProtein: null, staple: null, veg: null };
     for (const slot of MEAL_SLOTS) {
       const budgetKcal = targets.targetKcal * slotKcalShares[slot];
@@ -483,7 +496,8 @@ export function generateMealPlan(targets, profile = {}) {
                 item.components.some(part => ['salmon', 'rohu', 'prawns'].includes(part.foodId))
               )) &&
               (!item.components.some(part => part.foodId === 'cheese') || (dayKetoCheeseCount < 1 && ketoCheeseCount < 3)) &&
-              (!item.components.some(part => part.foodId === 'salmon') || ketoSalmonCount < 2)
+              (!item.components.some(part => part.foodId === 'salmon') || ketoSalmonCount < 2) &&
+              (!item.components.some(part => part.foodId === 'egg' || part.foodId === 'eggwhite') || dayKetoEggCount < 2)
             )))
           .sort((a, b) => {
             const aKcal = a.components.reduce((sum, part) => sum + part.kcal, 0);
@@ -513,6 +527,7 @@ export function generateMealPlan(targets, profile = {}) {
           ketoCheeseCount += 1;
         }
         if (choice.item.components.some(part => part.foodId === 'salmon')) ketoSalmonCount += 1;
+        if (choice.item.components.some(part => part.foodId === 'egg' || part.foodId === 'eggwhite')) dayKetoEggCount += 1;
       }
       if (['Lunch', 'Dinner'].includes(slot)) {
         const meat = ['chicken', 'fish', 'mutton', 'prawns'].includes(choice.item.mainProtein);
@@ -1233,6 +1248,222 @@ export function validatePlanContract(plan) {
 /**
  * Generates a complete, schema-valid VYORA plan honoring user profile and constraints.
  */
+
+/**
+ * Adaptive workout plan builder — mirrors diet-engine structure.
+ * Uses goal, experience, daysPerWeek, sessionMinutes, equipment and limitations.
+ */
+export function buildWorkoutPlan(profile = {}) {
+  const goal = ['fatloss', 'musclegain', 'recomp', 'endurance', 'general'].includes(profile.goal)
+    ? profile.goal
+    : 'recomp';
+  const experience = ['beginner', 'intermediate', 'advanced'].includes(profile.experience)
+    ? profile.experience
+    : 'beginner';
+  const daysPerWeek = Math.max(2, Math.min(6, Number(profile.daysPerWeek) || 4));
+  const sessionMinutes = Math.max(15, Math.min(90, Number(profile.sessionMinutes) || 35));
+  const equipmentRaw = String(profile.equipment || 'minimal').toLowerCase();
+  const equipmentLevel = equipmentRaw.includes('full') || equipmentRaw.includes('gym')
+    ? 'full_gym'
+    : equipmentRaw.includes('dumbbell')
+      ? 'dumbbells'
+      : equipmentRaw.includes('none') || equipmentRaw.includes('bodyweight')
+        ? 'none'
+        : 'minimal';
+  const limitations = Array.isArray(profile.limitations)
+    ? profile.limitations.map(item => String(item).toLowerCase())
+    : (profile.limitation ? [String(profile.limitation).toLowerCase()] : []);
+  const seed = Array.from(`${goal}|${experience}|${daysPerWeek}|${equipmentLevel}|${limitations.join(',')}`)
+    .reduce((hash, character) => ((hash * 31) + character.charCodeAt(0)) >>> 0, 2166136261);
+  const random = seededRandom(seed);
+  const byId = exercisesById();
+
+  const pool = exerciseLibrary.filter(item =>
+    matchesEquipment(item, equipmentLevel) &&
+    !isContraindicated(item, limitations) &&
+    (experience !== 'beginner' || item.difficulty !== 'advanced') &&
+    (experience !== 'advanced' || item.difficulty !== 'beginner' || item.pattern === 'mobility' || item.pattern === 'conditioning')
+  );
+
+  const pick = (patterns, usedIds) => {
+    const candidates = pool.filter(item =>
+      patterns.includes(item.pattern) && !usedIds.has(item.id));
+    const list = candidates.length ? candidates : pool.filter(item => !usedIds.has(item.id));
+    if (!list.length) {
+      const fallback = exerciseLibrary.find(item =>
+        !isContraindicated(item, limitations) && matchesEquipment(item, equipmentLevel));
+      return fallback || exerciseLibrary[0];
+    }
+    return list[Math.floor(random() * list.length)];
+  };
+
+  const resolveSub = (exercise) => {
+    for (const subId of exercise.substitutions || []) {
+      const sub = byId.get(subId);
+      if (sub && matchesEquipment(sub, equipmentLevel) && !isContraindicated(sub, limitations)) {
+        return sub;
+      }
+    }
+    return exerciseLibrary.find(item =>
+      item.pattern === exercise.pattern &&
+      matchesEquipment(item, equipmentLevel) &&
+      !isContraindicated(item, limitations)) || exercise;
+  };
+
+  const prescriptionFor = (exercise, goalKey, experienceKey) => {
+    if (exercise.pattern === 'conditioning') {
+      if (goalKey === 'endurance') return { prescription: '12–20 min steady or easy intervals', rest: '—', intensityRpe: 'RPE 5–6' };
+      if (goalKey === 'fatloss') return { prescription: '8–12 min easy effort', rest: '—', intensityRpe: 'RPE 5–6' };
+      return { prescription: '6–10 min easy effort', rest: '—', intensityRpe: 'RPE 5' };
+    }
+    if (exercise.pattern === 'mobility') {
+      return { prescription: '2 sets × 45–60s', rest: '20s', intensityRpe: 'RPE 3–4' };
+    }
+    if (exercise.pattern === 'anti_extension' || exercise.pattern === 'anti_rotation' || exercise.pattern === 'anti_lateral') {
+      return experienceKey === 'beginner'
+        ? { prescription: '3 sets × 20–30s or 8/side', rest: '45s', intensityRpe: 'RPE 6' }
+        : { prescription: '3 sets × 30–40s or 10/side', rest: '45s', intensityRpe: 'RPE 6–7' };
+    }
+    if (exercise.pattern === 'carry') {
+      return { prescription: '3 sets × 40–60s', rest: '45s', intensityRpe: 'RPE 6' };
+    }
+    if (goalKey === 'musclegain') {
+      return experienceKey === 'beginner'
+        ? { prescription: '3 sets × 8–10 reps', rest: '75s', intensityRpe: 'RPE 7' }
+        : { prescription: '3–4 sets × 6–10 reps', rest: '90s', intensityRpe: 'RPE 7–8' };
+    }
+    if (goalKey === 'endurance') {
+      return { prescription: '2–3 sets × 12–15 reps', rest: '45s', intensityRpe: 'RPE 6' };
+    }
+    if (goalKey === 'fatloss') {
+      return { prescription: '3 sets × 10–12 reps', rest: '60s', intensityRpe: 'RPE 6–7' };
+    }
+    return experienceKey === 'beginner'
+      ? { prescription: '3 sets × 8–12 reps', rest: '60s', intensityRpe: 'RPE 6–7' }
+      : { prescription: '3 sets × 8–12 reps', rest: '75s', intensityRpe: 'RPE 7' };
+  };
+
+  const templatesByDays = {
+    2: [
+      { focus: 'Full Body Strength A', patterns: ['squat', 'horizontal_push', 'horizontal_pull', 'anti_extension'] },
+      { focus: 'Full Body Strength B', patterns: ['hinge', 'vertical_push', 'horizontal_pull', 'anti_rotation'] }
+    ],
+    3: [
+      { focus: 'Full Body Strength A', patterns: ['squat', 'horizontal_push', 'horizontal_pull', 'anti_extension'] },
+      { focus: 'Conditioning & Core', patterns: ['conditioning', 'anti_lateral', 'mobility'] },
+      { focus: 'Full Body Strength B', patterns: ['hinge', 'vertical_push', 'horizontal_pull', 'carry'] }
+    ],
+    4: [
+      { focus: 'Lower Body Strength', patterns: ['squat', 'hinge', 'lunge', 'anti_extension'] },
+      { focus: 'Upper Body Push/Pull', patterns: ['horizontal_push', 'horizontal_pull', 'vertical_push', 'anti_rotation'] },
+      { focus: 'Conditioning & Core', patterns: ['conditioning', 'carry', 'mobility'] },
+      { focus: 'Full Body Strength', patterns: ['squat', 'horizontal_pull', 'horizontal_push', 'anti_extension'] }
+    ],
+    5: [
+      { focus: 'Lower Body Strength', patterns: ['squat', 'hinge', 'lunge'] },
+      { focus: 'Upper Push', patterns: ['horizontal_push', 'vertical_push', 'isolation'] },
+      { focus: 'Conditioning', patterns: ['conditioning', 'mobility'] },
+      { focus: 'Upper Pull', patterns: ['horizontal_pull', 'vertical_pull', 'anti_rotation'] },
+      { focus: 'Full Body & Core', patterns: ['squat', 'horizontal_pull', 'anti_extension', 'carry'] }
+    ],
+    6: [
+      { focus: 'Lower Strength', patterns: ['squat', 'hinge'] },
+      { focus: 'Upper Push', patterns: ['horizontal_push', 'vertical_push'] },
+      { focus: 'Conditioning', patterns: ['conditioning', 'mobility'] },
+      { focus: 'Upper Pull', patterns: ['horizontal_pull', 'vertical_pull'] },
+      { focus: 'Lower Accessory', patterns: ['lunge', 'isolation', 'anti_extension'] },
+      { focus: 'Full Body Mix', patterns: ['horizontal_push', 'horizontal_pull', 'carry'] }
+    ]
+  };
+
+  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const templates = templatesByDays[daysPerWeek] || templatesByDays[4];
+  // Spread training days across the week
+  const schedule = [];
+  const step = 7 / templates.length;
+  for (let index = 0; index < templates.length; index += 1) {
+    schedule.push({
+      day: dayNames[Math.min(6, Math.round(index * step))],
+      ...templates[index]
+    });
+  }
+  // Fill remaining calendar days as recovery / mobility
+  const scheduledDays = new Set(schedule.map(item => item.day));
+  for (const day of dayNames) {
+    if (!scheduledDays.has(day)) {
+      schedule.push({
+        day,
+        focus: 'Recovery & Mobility',
+        patterns: ['mobility', 'anti_extension'],
+        recovery: true
+      });
+    }
+  }
+  schedule.sort((a, b) => dayNames.indexOf(a.day) - dayNames.indexOf(b.day));
+
+  const warmUp = '4–6 min easy march or walk + hip openers, arm circles and 8 bodyweight good-mornings';
+  const coolDown = '4–5 min gentle stretching for hips, chest and hamstrings + slow nasal breathing';
+
+  const days = schedule.map((slot, dayIndex) => {
+    const usedIds = new Set();
+    const exerciseCount = slot.recovery
+      ? 2
+      : Math.max(2, Math.min(5, Math.round(sessionMinutes / 12)));
+    const patterns = [...slot.patterns];
+    while (patterns.length < exerciseCount) {
+      patterns.push(patterns[patterns.length % slot.patterns.length] || 'anti_extension');
+    }
+    const exercises = [];
+    for (let index = 0; index < exerciseCount; index += 1) {
+      let exercise = pick([patterns[index]], usedIds);
+      if (isContraindicated(exercise, limitations)) exercise = resolveSub(exercise);
+      usedIds.add(exercise.id);
+      const rx = prescriptionFor(exercise, goal, experience);
+      const sub = resolveSub(exercise);
+      exercises.push({
+        name: exercise.name,
+        prescription: rx.prescription,
+        rest: rx.rest,
+        intensityRpe: rx.intensityRpe,
+        formCue: exercise.cue,
+        substitution: sub.id !== exercise.id ? sub.name : (exercise.substitutions[0] ? byId.get(exercise.substitutions[0])?.name : exercise.name),
+        muscleGroup: exercise.muscleGroup,
+        pattern: exercise.pattern,
+        videoQuery: exercise.videoQuery
+      });
+    }
+    const durationMin = slot.recovery
+      ? Math.min(20, sessionMinutes)
+      : sessionMinutes;
+    return {
+      day: slot.day,
+      focus: slot.focus,
+      durationMin,
+      environment: equipmentLevel === 'full_gym' ? 'gym' : (equipmentLevel === 'none' ? 'home' : 'flexible'),
+      warmUp: slot.recovery ? 'Optional gentle stroll and breathing' : warmUp,
+      exercises,
+      coolDown: slot.recovery ? 'Early wind-down routine' : coolDown
+    };
+  });
+
+  const progressionNote = experience === 'beginner'
+    ? 'Weekly progression: when all working sets feel like RPE ≤ 7, add 1–2 reps next week before increasing load.'
+    : experience === 'intermediate'
+      ? 'Weekly progression: add a small load increase or one extra set on primary lifts every 1–2 weeks if recovery is solid.'
+      : 'Weekly progression: prioritize quality overload on main patterns; deload volume every 4th week if performance stalls.';
+
+  return {
+    days,
+    weeklyProgressionNote: progressionNote,
+    experience,
+    daysPerWeek,
+    sessionMinutes,
+    equipmentLevel,
+    limitationsHonored: limitations
+  };
+}
+
+
 export function buildAdaptivePlan(input = {}) {
   const heightCm = Math.max(120, Math.min(230, Number(input.heightCm || input.height) || 168));
   const weightKg = Math.max(35, Math.min(220, Number(input.weightKg || input.weight) || 65));
@@ -1243,6 +1474,10 @@ export function buildAdaptivePlan(input = {}) {
   const planType = ['diet', 'workout', 'combined'].includes(input.planType || input.kind) ? (input.planType || input.kind) : 'combined';
   const equipment = str(input.equipment, 100) || 'minimal / home dumbbells';
   const sessionMinutes = Math.max(15, Math.min(90, Number(input.sessionMinutes) || 35));
+  const experience = ['beginner', 'intermediate', 'advanced'].includes(input.experience)
+    ? input.experience
+    : 'beginner';
+  const daysPerWeek = Math.max(2, Math.min(6, Number(input.daysPerWeek) || 4));
   const exclusions = Array.isArray(input.exclusions)
     ? input.exclusions.map(x => str(x, 40).toLowerCase()).filter(Boolean)
     : [];
@@ -1275,69 +1510,60 @@ export function buildAdaptivePlan(input = {}) {
   const { meals, dailyTotals, generationDiagnostics } = generateMealPlan(targets, {
     ...targets, diet, allergies, exclusions
   });
+    const dayMisses = dailyTotals.filter(total => {
+    const kcalOk = Math.abs(total.kcal - targets.targetKcal) <= targets.targetKcal * CALORIE_TOLERANCE;
+    const proteinOk = total.proteinG >= targets.proteinG * PROTEIN_MIN_RATIO &&
+      total.proteinG <= targets.proteinG * PROTEIN_MAX_RATIO &&
+      total.proteinG * 4 <= total.kcal * PROTEIN_CALORIE_SHARE + 1;
+    return !(kcalOk && proteinOk);
+  });
+  const weekAvgKcal = dailyTotals.reduce((sum, total) => sum + total.kcal, 0) / Math.max(dailyTotals.length, 1);
+  const weekOk = Math.abs(weekAvgKcal - targets.targetKcal) <= targets.targetKcal * WEEKLY_CALORIE_TOLERANCE;
   const worstDailyDeviation = dailyTotals.reduce((maximum, total) => {
     const kcalDeviation = Math.abs(total.kcal - targets.targetKcal) / targets.targetKcal * 100;
-    const proteinDeviation = Math.abs(total.proteinG - targets.proteinG) / targets.proteinG * 100;
-    return Math.max(maximum, kcalDeviation, proteinDeviation);
+    const proteinLow = total.proteinG < targets.proteinG * PROTEIN_MIN_RATIO
+      ? ((targets.proteinG * PROTEIN_MIN_RATIO - total.proteinG) / targets.proteinG) * 100 : 0;
+    const proteinHigh = total.proteinG > targets.proteinG * PROTEIN_MAX_RATIO
+      ? ((total.proteinG - targets.proteinG * PROTEIN_MAX_RATIO) / targets.proteinG) * 100 : 0;
+    return Math.max(maximum, kcalDeviation, proteinLow, proteinHigh);
   }, 0);
-  const accuracyNote = worstDailyDeviation > 5
-    ? ` Daily totals may differ from your target by up to ${Math.ceil(worstDailyDeviation / 5) * 5}%.`
+  const accuracyNote = (dayMisses.length || !weekOk)
+    ? ` Daily totals may differ from your target by up to ${Math.max(5, Math.ceil(worstDailyDeviation / 5) * 5)}%.`
     : '';
   if (targets.calorieFloorApplied) {
     safetyFlags.push('The minimum safe calorie floor of 1350 kcal/day was applied.');
   }
 
-  // Clone and adapt workout days
-  let days = structuredClone(BASE_WORKOUT_DAYS).map(d => ({
-    ...d,
-    durationMin: Math.min(d.durationMin, sessionMinutes)
-  }));
-
-  const hasKneePain = limitations.some(l => l.includes('knee'));
-  const hasBackPain = limitations.some(l => l.includes('back') || l.includes('spine'));
-
-  if (hasKneePain) {
+  const workout = buildWorkoutPlan({
+    goal,
+    experience,
+    daysPerWeek,
+    sessionMinutes,
+    equipment,
+    limitations
+  });
+  const days = workout.days;
+  if (limitations.some(l => l.includes('knee'))) {
     constraintsHonored.push('limitation:knee_pain_caution');
-    safetyFlags.push('Knee discomfort reported: high-flexion loaded squats/lunges replaced with glute bridges and low-impact movements. Stop immediately if pain worsens and consult a physiotherapist/doctor.');
-    days = days.map(d => ({
-      ...d,
-      exercises: d.exercises.map(ex => {
-        if (/squat|lunge/i.test(ex.name)) {
-          return {
-            ...ex,
-            name: `${ex.substitution || 'Supine Glute Bridge'} (Knee-Friendly Swap)`,
-            formCue: 'Pain-free range only; stop immediately if knee discomfort increases.'
-          };
-        }
-        return ex;
-      })
-    }));
+    safetyFlags.push('Knee discomfort reported: high-flexion loaded squats/lunges were avoided. Stop if pain worsens and consult a physiotherapist or doctor.');
   }
-
-  if (hasBackPain) {
+  if (limitations.some(l => l.includes('back') || l.includes('spine'))) {
     constraintsHonored.push('limitation:back_pain_caution');
-    safetyFlags.push('Back sensitivity reported: axial hinges replaced with supported core and glute work. Seek clinical evaluation for radiating or worsening pain.');
-    days = days.map(d => ({
-      ...d,
-      exercises: d.exercises.map(ex => {
-        if (/deadlift|row/i.test(ex.name)) {
-          return {
-            ...ex,
-            name: `${ex.substitution || 'Chest-Supported Row / Bird-Dog'} (Back-Friendly Swap)`,
-            formCue: 'Maintain neutral spine; stop if any lower-back pain occurs.'
-          };
-        }
-        return ex;
-      })
-    }));
+    safetyFlags.push('Back sensitivity reported: loaded spinal hinges were avoided. Seek clinical evaluation for radiating or worsening pain.');
   }
+  if (limitations.some(l => l.includes('shoulder'))) {
+    constraintsHonored.push('limitation:shoulder_caution');
+    safetyFlags.push('Shoulder sensitivity reported: overhead and aggressive pressing patterns were limited.');
+  }
+  constraintsHonored.push(`experience:${experience}`);
+  constraintsHonored.push(`daysPerWeek:${daysPerWeek}`);
 
   const plan = {
     planType,
     version: 1,
     goal,
     profileSnapshot: {
-      heightCm, weightKg, age, gender, diet, goal, equipment, sessionMinutes,
+      heightCm, weightKg, age, gender, diet, goal, equipment, sessionMinutes, experience, daysPerWeek,
       activityLevel: targets.activityLevel, allergies, exclusions
     },
     assumptions: [
@@ -1350,6 +1576,7 @@ export function buildAdaptivePlan(input = {}) {
     dailyTotals,
     generationDiagnostics,
     days,
+    weeklyProgressionNote: workout.weeklyProgressionNote,
     substitutions: {
       eggFree: 'Moong dal chilla, paneer/tofu bhurji, or roasted chana bowls.',
       noEquipment: 'Bodyweight squats/bridges, incline push-ups, backpack rows, and brisk walking.',
