@@ -211,6 +211,18 @@
       workoutDaysBox.appendChild(row);
     });
 
+    const aiStatus = document.getElementById('aiPlanStatus');
+    const aiText = document.getElementById('aiPlanText');
+    if (aiStatus && aiText) {
+      if (plan.geminiReviewText) {
+        aiStatus.textContent = 'Prototype Gemini-style review (rule-based — not a live model call).';
+        aiText.textContent = plan.geminiReviewText;
+      } else {
+        aiStatus.textContent = 'Generate a plan to request an AI review tailored to your goal and preferences.';
+        aiText.textContent = '';
+      }
+    }
+
     ensurePartialAdaptationBar();
   }
 
@@ -411,19 +423,20 @@
     }
 
     document.getElementById('planResults').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Prototype uses plan.geminiReviewText (rule-based). Optional live chat only enhances if available.
     const aiStatus = document.getElementById('aiPlanStatus');
     const aiText = document.getElementById('aiPlanText');
-    aiStatus.textContent = 'Asking Gemini to review your plan…';
-    aiText.textContent = '';
-    if (window.VyoraAPI) {
+    if (window.VyoraAPI?.chat && aiStatus && aiText) {
       const prompt = `Create a practical, safe starter fitness plan review. Profile: height ${h} cm, weight ${w} kg, age ${age}, gender ${gender}, goal ${goal}, diet preference ${diet}. Mention uncertainty on calorie estimates and advise clinician consultation for health conditions.`;
       window.VyoraAPI.chat(prompt, 'vyora')
         .then((answer) => {
-          aiStatus.textContent = 'Gemini plan review (AI-generated general wellness guidance)';
-          aiText.textContent = answer;
+          if (answer) {
+            aiStatus.textContent = 'Gemini plan review (AI-generated general wellness guidance)';
+            aiText.textContent = answer;
+          }
         })
-        .catch((err) => {
-          aiStatus.textContent = 'Gemini review unavailable: ' + err.message + '. Your server-validated adaptive plan above is ready and editable.';
+        .catch(() => {
+          /* keep prototype rule-based review already shown */
         });
     }
   });

@@ -25,6 +25,27 @@
     }
   }
 
+  const reviewEl = document.getElementById('workoutGeminiReview');
+
+  function setReview(text) {
+    if (!reviewEl) return;
+    if (!text) {
+      reviewEl.style.display = 'none';
+      reviewEl.replaceChildren();
+      return;
+    }
+    reviewEl.style.display = '';
+    reviewEl.replaceChildren();
+    const title = document.createElement('h3');
+    title.style.marginTop = '0';
+    title.textContent = 'Gemini AI Plan Review';
+    const body = document.createElement('p');
+    body.style.margin = '0';
+    body.style.whiteSpace = 'pre-wrap';
+    body.textContent = text;
+    reviewEl.append(title, body);
+  }
+
   function placeholder() {
     dayTabs.replaceChildren();
     exList.replaceChildren();
@@ -32,6 +53,7 @@
     if (statusEl) {
       statusEl.textContent = 'No active plan found. Head to the Home page to build your custom plan.';
     }
+    setReview('');
   }
 
   function renderDay(day, plan) {
@@ -82,6 +104,7 @@
     }
     if (statusEl) statusEl.textContent = '';
     if (progressionEl) progressionEl.textContent = plan.weeklyProgressionNote || '';
+    setReview(plan.geminiReviewText || '');
 
     const days = plan.days.map(d => d.day);
     dayTabs.replaceChildren();

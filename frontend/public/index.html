@@ -197,7 +197,7 @@
           <div class="grid cols-3" id="rVideos"></div>
         </div>
         <div class="card" style="margin-top:14px;">
-          <h3 style="margin-top:0;">Gemini coach · personalized plan review</h3>
+          <h3 style="margin-top:0;">Gemini AI Plan Review</h3>
           <p id="aiPlanStatus">Generate a plan to request an AI review tailored to your goal and preferences.</p>
           <div id="aiPlanText" style="white-space:pre-wrap;"></div>
         </div>
@@ -260,6 +260,7 @@
       <p class="sub">Auto-built from your goal, equipment, and recent adherence. Check off sets as you go.</p>
       <p id="workoutPlanStatus" class="bottom-note" role="status"></p>
       <p id="workoutProgression" class="bottom-note"></p>
+      <div id="workoutGeminiReview" class="card" style="margin-top:12px;display:none;"></div>
       <div class="daytabs" id="dayTabs" role="tablist" aria-label="Workout days"></div>
       <div class="card"><div id="exList"></div></div>
     </section>
@@ -369,6 +370,7 @@
       <h1 class="title">Today's fuel</h1>
       <p class="sub">Targets recalculate as your weight and activity logs update.</p>
       <p id="dietPlanStatus" class="bottom-note" role="status"></p>
+      <div id="dietGeminiReview" class="card" style="margin-bottom:12px;display:none;"></div>
       <div class="grid cols-2">
         <div class="card">
           <h3 style="margin-top:0;">Macros</h3>

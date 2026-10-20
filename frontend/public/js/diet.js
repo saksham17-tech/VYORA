@@ -27,6 +27,27 @@
     }
   }
 
+  const reviewEl = document.getElementById('dietGeminiReview');
+
+  function setReview(text) {
+    if (!reviewEl) return;
+    if (!text) {
+      reviewEl.style.display = 'none';
+      reviewEl.replaceChildren();
+      return;
+    }
+    reviewEl.style.display = '';
+    reviewEl.replaceChildren();
+    const title = document.createElement('h3');
+    title.style.marginTop = '0';
+    title.textContent = 'Gemini AI Plan Review';
+    const body = document.createElement('p');
+    body.style.margin = '0';
+    body.style.whiteSpace = 'pre-wrap';
+    body.textContent = text;
+    reviewEl.append(title, body);
+  }
+
   function placeholder() {
     if (statusEl) statusEl.textContent = 'No active plan found. Head to the Home page to build your custom plan.';
     macrosEl.replaceChildren();
@@ -34,6 +55,7 @@
     if (tabsEl) tabsEl.replaceChildren();
     mealsEl.replaceChildren();
     if (totalEl) totalEl.textContent = '';
+    setReview('');
   }
 
   function renderDay(day, plan) {
@@ -70,6 +92,7 @@
       return;
     }
     if (statusEl) statusEl.textContent = '';
+    setReview(plan.geminiReviewText || '');
 
     const meta = plan.estimateMetadata || {};
     macrosEl.replaceChildren();

@@ -1599,6 +1599,29 @@ export function buildAdaptivePlan(input = {}) {
       confidence: 'moderate_estimate',
       disclaimer: 'All calorie and macro values are approximate estimates (±15%). Consult a qualified dietitian or doctor for medical nutrition therapy.'
     },
+    geminiReviewText: (() => {
+      const goalLabel = ({
+        fatloss: 'fat loss',
+        musclegain: 'muscle gain',
+        recomp: 'body recomposition',
+        endurance: 'endurance',
+        general: 'general wellness'
+      })[goal] || goal;
+      const dietLabel = ({
+        veg: 'vegetarian',
+        vegan: 'vegan',
+        nonveg: 'non-vegetarian',
+        keto: 'keto-friendly'
+      })[diet] || diet;
+      const trainingDays = (days || []).filter(d => d && !/recovery/i.test(d.focus || '')).length;
+      const session = sessionMinutes || 35;
+      return (
+        `Based on your goal of ${goalLabel}, I've structured a ${dietLabel} plan with a daily target of about ${targets.targetKcal} kcal ` +
+        `(roughly ${targets.proteinG} g protein) alongside a ${trainingDays}-day workout split of about ${session} minutes per session. ` +
+        `Focus on consistency over perfection this week—log what you complete, swap meals when life gets busy, and stop any movement that causes sharp pain. ` +
+        `These numbers are approximate estimates, not medical advice; a clinician or dietitian can refine them for your situation.`
+      );
+    })(),
     explanation: `Generated a personalized ${diet} diet and ${days.length}-day workout plan for ${goal}. BMI ${targets.bmi}, TDEE ${targets.tdee} kcal, target ${targets.targetKcal} kcal/day with ${targets.proteinG}g protein, ${targets.carbsG}g carbs, and ${targets.fatG}g fat. Honored constraints: ${constraintsHonored.join(', ')}.${accuracyNote}`,
     changeHistory: [
       {
