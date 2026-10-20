@@ -51,6 +51,34 @@
     return node;
   }
 
+
+  const ACTIVE_PLAN_KEY = 'vyora_active_plan';
+
+  function showGuestBanner(isGuest) {
+    const results = document.getElementById('planResults');
+    if (!results) return;
+    let banner = document.getElementById('guestPlanBanner');
+    if (!isGuest) {
+      if (banner) banner.remove();
+      return;
+    }
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'guestPlanBanner';
+      banner.className = 'card';
+      banner.setAttribute('role', 'status');
+      banner.style.marginBottom = '14px';
+      banner.style.border = '1px solid #e8b86d';
+      banner.style.background = 'rgba(232,184,109,0.12)';
+      results.insertBefore(banner, results.firstChild);
+    }
+    banner.replaceChildren();
+    const p = document.createElement('p');
+    p.style.margin = '0';
+    p.textContent = 'You are using guest mode. Your data is not stored anywhere and might be lost at any time. Log in to save your progress and access premium features.';
+    banner.appendChild(p);
+  }
+
   function clearPlanResults() {
     ['rDietSummary', 'rMeals', 'rWorkoutSummary', 'rWorkoutDays', 'rSupps', 'rVideos', 'rGyms', 'aiPlanText']
       .forEach(id => document.getElementById(id)?.replaceChildren());
@@ -156,14 +184,29 @@
       if (idx === plan.days.length - 1) row.style.border = 'none';
       const dayLabel = el('div', 'exname', `${d.day} · ${d.focus || ''} (${d.durationMin || 30}m · ${d.environment || 'flexible'})`);
       const warm = d.warmUp ? el('div', 'exmeta', `Warm-up: ${d.warmUp}`) : null;
-      const exSummary = Array.isArray(d.exercises)
-        ? d.exercises.map(e => `${e.name} [${e.prescription}${e.intensityRpe ? ` · ${e.intensityRpe}` : ''}]`).join(' · ')
-        : String(d.focus || d);
-      const dayMeta = el('div', 'exmeta', exSummary);
       const cool = d.coolDown ? el('div', 'exmeta', `Cool-down: ${d.coolDown}`) : null;
       row.append(dayLabel);
       if (warm) row.appendChild(warm);
-      row.appendChild(dayMeta);
+      if (Array.isArray(d.exercises)) {
+        d.exercises.forEach(exercise => {
+          const line = el('div', 'exmeta');
+          const label = document.createElement('span');
+          const rx = [exercise.prescription, exercise.intensityRpe].filter(Boolean).join(' · ');
+          label.textContent = rx ? `${exercise.name} [${rx}]` : String(exercise.name || '');
+          line.appendChild(label);
+          const demo = document.createElement('a');
+          demo.textContent = ' Watch demo ↗';
+          demo.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.videoQuery || exercise.name || 'exercise form')}`;
+          demo.target = '_blank';
+          demo.rel = 'noopener noreferrer';
+          demo.style.marginLeft = '6px';
+          demo.style.fontSize = '12px';
+          line.appendChild(demo);
+          row.appendChild(line);
+        });
+      } else {
+        row.appendChild(el('div', 'exmeta', String(d.focus || d)));
+      }
       if (cool) row.appendChild(cool);
       workoutDaysBox.appendChild(row);
     });
@@ -249,6 +292,7 @@
     const daysPerWeek = Number(document.getElementById('pDaysPerWeek')?.value || 4);
     const equipment = document.getElementById('pEquipment')?.value || 'minimal';
     const sessionMinutes = Number(document.getElementById('pSessionMinutes')?.value || 35);
+    const location = (document.getElementById('pLocation')?.value || '').trim();
     const cuisine = document.getElementById('pCuisine').value;
     const allergies = [...document.querySelectorAll('#pAllergies input:checked')].map(input => input.value);
     const generateButton = document.getElementById('pGenerate');
@@ -261,15 +305,33 @@
     // Render supplements & demo videos using safe DOM APIs
     const suppsBox = document.getElementById('rSupps');
     suppsBox.replaceChildren();
-    (suppBank[goal] || suppBank.recomp).forEach((s) => {
-      suppsBox.appendChild(el('span', 'tag', s));
+    const prototypeSupplements = [
+      { label: 'Whey/plant protein', query: 'whey or plant protein powder supplement' },
+      { label: 'Creatine monohydrate', query: 'Creatine monohydrate supplement' },
+      { label: 'Omega-3', query: 'Omega-3 fish oil supplement' }
+    ];
+    prototypeSupplements.forEach(({ label, query }) => {
+      const link = document.createElement('a');
+      link.className = 'tag';
+      link.href = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = label;
+      link.style.display = 'inline-block';
+      link.style.margin = '0 6px 6px 0';
+      link.style.textDecoration = 'none';
+      suppsBox.appendChild(link);
     });
+    const suppNote = el('p', 'bottom-note', 'Suggestions, not prescriptions — check with a professional first.');
+    suppsBox.appendChild(suppNote);
 
     const videosBox = document.getElementById('rVideos');
     videosBox.replaceChildren();
     (videoBank[goal] || videoBank.recomp).forEach(([title, q]) => {
-      const vc = el('div', 'vid-card', title + ' ');
-      const a = el('a', '', 'Watch demo ↗');
+      const vc = el('div', 'video-card');
+      vc.appendChild(el('b', '', title));
+      const a = document.createElement('a');
+      a.textContent = 'Watch demo ↗';
       a.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
@@ -279,7 +341,22 @@
 
     const gymBox = document.getElementById('rGyms');
     gymBox.replaceChildren();
-    gymBox.appendChild(el('p', 'bottom-note', 'Use Gyms & Cafés to save verified local training destinations. Live listings require a configured maps provider.'));
+    const mapsQuery = location
+      ? `gyms in ${location}`
+      : 'gyms near me';
+    const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
+    const gymIntro = el('p', '', location
+      ? `Open Google Maps for gyms in ${location}:`
+      : 'Add a city or neighborhood above for a local search, or open a general maps search:');
+    const gymLink = document.createElement('a');
+    gymLink.href = mapsHref;
+    gymLink.target = '_blank';
+    gymLink.rel = 'noopener noreferrer';
+    gymLink.textContent = location ? `Gyms in ${location} on Google Maps ↗` : 'Gyms near me on Google Maps ↗';
+    gymLink.style.display = 'inline-block';
+    gymLink.style.marginTop = '6px';
+    const gymNote = el('p', 'bottom-note', 'Prototype link only — not live listings. Save verified places under Gyms & Cafés when a maps provider is configured.');
+    gymBox.append(gymIntro, gymLink, gymNote);
 
     if (window.VyoraAPI?.generatePlan) {
       try {
@@ -299,7 +376,20 @@
           cuisine,
           planType: 'combined'
         });
+        const planPayload = generated.plan || generated;
+        try {
+          localStorage.setItem('vyora_active_plan', JSON.stringify({
+            ...generated,
+            plan: planPayload,
+            guest: generated.guest === true || generated.persisted === false,
+            savedAt: new Date().toISOString()
+          }));
+        } catch (storageError) {
+          console.warn('Could not cache plan locally', storageError);
+        }
         renderStructuredPlan(generated);
+        showGuestBanner(generated.guest === true || generated.persisted === false);
+        window.dispatchEvent(new CustomEvent('vyora:plan-updated'));
       } catch (e) {
         clearPlanResults();
         const message = e.message || 'Please try again.';

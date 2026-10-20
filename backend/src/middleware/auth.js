@@ -30,3 +30,27 @@ export function auth(req, res, next) {
 }
 
 export const authOnly = auth;
+
+/** Attach req.user when a valid token is present; otherwise continue as guest. */
+export function optionalAuth(req, res, next) {
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+  try {
+    const payload = jwt.verify(token, secret);
+    if (payload.jti) {
+      const revoked = db.prepare('SELECT 1 FROM revoked_tokens WHERE jti = ?').get(payload.jti);
+      if (revoked) {
+        req.user = null;
+        return next();
+      }
+    }
+    req.user = payload;
+    next();
+  } catch {
+    req.user = null;
+    next();
+  }
+}

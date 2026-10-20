@@ -159,6 +159,9 @@
           <div class="field"><label for="pSessionMinutes">Session length (min)</label>
             <input id="pSessionMinutes" type="number" min="15" max="90" value="35" placeholder="e.g. 35"/>
           </div>
+          <div class="field"><label for="pLocation">City or neighborhood <span style="opacity:0.7;font-weight:400">(optional)</span></label>
+            <input id="pLocation" type="text" maxlength="80" placeholder="e.g. Koramangala, Jaipur" autocomplete="address-level2"/>
+          </div>
 <div class="field"><label>&nbsp;</label><button class="btn" id="pGenerate" style="width:100%;">Generate my plan</button></div>
         </div>
         <p id="pFormError" class="form-error" role="alert"></p>
@@ -255,7 +258,9 @@
       <p class="eyebrow">Workout Engine</p>
       <h1 class="title">This week's plan</h1>
       <p class="sub">Auto-built from your goal, equipment, and recent adherence. Check off sets as you go.</p>
-      <div class="daytabs" id="dayTabs"></div>
+      <p id="workoutPlanStatus" class="bottom-note" role="status"></p>
+      <p id="workoutProgression" class="bottom-note"></p>
+      <div class="daytabs" id="dayTabs" role="tablist" aria-label="Workout days"></div>
       <div class="card"><div id="exList"></div></div>
     </section>
 
@@ -363,28 +368,22 @@
       <p class="eyebrow">Nutrition Engine</p>
       <h1 class="title">Today's fuel</h1>
       <p class="sub">Targets recalculate as your weight and activity logs update.</p>
+      <p id="dietPlanStatus" class="bottom-note" role="status"></p>
       <div class="grid cols-2">
         <div class="card">
           <h3 style="margin-top:0;">Macros</h3>
-          <div class="macro"><span>Protein · 148g / 170g</span><div class="macro-bar"><i style="width:87%"></i></div></div>
-          <div class="macro"><span>Carbs · 165g / 210g</span><div class="macro-bar"><i style="width:78%"></i></div></div>
-          <div class="macro"><span>Fat · 48g / 60g</span><div class="macro-bar"><i style="width:80%"></i></div></div>
-          <p style="margin-top:14px;">Diet preference: <span class="tag">High-protein</span><span class="tag">Non-veg</span></p>
+          <div id="dietMacros"></div>
         </div>
         <div class="card">
-          <h3 style="margin-top:0;">Supplement suggestions</h3>
-          <p>Based on your goal and current macro gaps:</p>
-          <p><span class="tag">Whey protein</span><span class="tag">Creatine monohydrate</span><span class="tag">Multivitamin</span></p>
-          <a class="btn ghost" href="#" onclick="return false;" style="display:inline-block;">View on marketplace ↗</a>
-          <p style="font-size:12px;margin-top:10px;">Suggestions, not prescriptions — check with a professional before starting anything new.</p>
+          <h3 style="margin-top:0;">Plan notes</h3>
+          <div id="dietSummary"></div>
         </div>
       </div>
       <div class="card" style="margin-top:14px;">
-        <h3 style="margin-top:0;">Meals today</h3>
-        <div class="meal"><b>Breakfast</b><p style="margin:2px 0;">Greek yogurt, oats, banana, almonds — 520 kcal</p></div>
-        <div class="meal"><b>Lunch</b><p style="margin:2px 0;">Grilled chicken, rice, sautéed greens — 640 kcal</p></div>
-        <div class="meal"><b>Dinner</b><p style="margin:2px 0;">Paneer/tofu stir-fry, quinoa — 480 kcal</p></div>
-        <div class="meal" style="border:none;"><b>Snack</b><p style="margin:2px 0;">Protein shake, apple — 200 kcal</p></div>
+        <h3 style="margin-top:0;">Meals this week</h3>
+        <div id="dietDayTabs" class="day-tabs" role="tablist" aria-label="Meal plan days"></div>
+        <div id="dietMeals"></div>
+        <p id="dietDayTotal" class="bottom-note"></p>
       </div>
     </section>
 
@@ -604,6 +603,7 @@
 <script src="js/navigation.js"></script>
 <script src="js/copilot.js"></script>
 <script src="js/workout.js"></script>
+<script src="js/diet.js"></script>
 <script src="js/training.js"></script>
 <script src="js/locator.js"></script>
 <script src="js/community.js"></script>

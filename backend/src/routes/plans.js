@@ -3,7 +3,7 @@
  */
 import { db, isoNow } from '../db.js';
 import { id, str, json } from '../utils/helpers.js';
-import { authOnly } from '../middleware/auth.js';
+import { authOnly, optionalAuth } from '../middleware/auth.js';
 import { selectPolicy, redFlagResponse } from '../services/aiSafety.js';
 import { logAudit } from '../services/auditService.js';
 import {
@@ -29,9 +29,13 @@ function userFacingPlan(plan) {
 }
 
 export function registerPlanRoutes(app) {
-  app.post('/api/plans/generate', authOnly, (req, res) => {
-    const profileRow = db.prepare('SELECT profile_json FROM profiles WHERE user_id = ?').get(req.user.sub);
-    const storedProfile = json(profileRow?.profile_json, {});
+  app.post('/api/plans/generate', optionalAuth, (req, res) => {
+    const isGuest = !req.user || req.user.guest === true;
+    let storedProfile = {};
+    if (req.user?.sub) {
+      const profileRow = db.prepare('SELECT profile_json FROM profiles WHERE user_id = ?').get(req.user.sub);
+      storedProfile = json(profileRow?.profile_json, {});
+    }
     const mergedInput = { ...storedProfile, ...(req.body || {}) };
 
     const notesText = [
@@ -39,7 +43,12 @@ export function registerPlanRoutes(app) {
       ...(Array.isArray(mergedInput.limitations) ? mergedInput.limitations : [mergedInput.limitation])
     ].filter(Boolean).join(' ');
     if (notesText && selectPolicy('vyora', notesText).escalate) {
-      logAudit({ actorId: req.user.sub, action: 'plan.red_flag_blocked', targetType: 'plan', outcome: 'escalated' });
+      logAudit({
+        actorId: req.user?.sub || null,
+        action: 'plan.red_flag_blocked',
+        targetType: 'plan',
+        outcome: 'escalated'
+      });
       return res.status(422).json({
         code: 'SAFETY_RED_FLAG',
         error: 'Cannot generate a workout or diet plan for emergency or severe symptoms. Please seek urgent medical care.',
@@ -48,34 +57,54 @@ export function registerPlanRoutes(app) {
     }
 
     const generatedPlan = buildAdaptivePlan(mergedInput);
+    const publicPlan = userFacingPlan(generatedPlan);
     const validation = validatePlanContract(generatedPlan);
     if (!validation.valid) {
       return res.status(500).json({ error: 'Generated plan failed server schema validation.', details: validation.errors });
     }
 
-    const planId = id(), now = isoNow();
-    const kind = generatedPlan.planType;
-    const title = str(req.body?.title, 120) || `${generatedPlan.goal} adaptive plan (v${generatedPlan.version})`;
-    db.prepare(
-      'INSERT INTO plans(id,user_id,kind,title,plan_json,model,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)'
-    ).run(planId, req.user.sub, kind, title, JSON.stringify(generatedPlan), 'vyora-plan-engine-v2', now, now);
+    const kind = publicPlan.planType;
+    const title = str(req.body?.title, 120) || `${publicPlan.goal} adaptive plan (v${publicPlan.version})`;
+    const now = isoNow();
 
-    logAudit({
-      actorId: req.user.sub,
-      action: 'plan.generated',
-      targetType: 'plan',
-      targetId: planId,
-      metadata: { kind, goal: generatedPlan.goal, version: generatedPlan.version }
-    });
+    // Authenticated non-guest users: persist. Guests / unauthenticated: return only.
+    if (!isGuest && req.user?.sub) {
+      const planId = id();
+      db.prepare(
+        'INSERT INTO plans(id,user_id,kind,title,plan_json,model,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)'
+      ).run(planId, req.user.sub, kind, title, JSON.stringify(generatedPlan), 'vyora-plan-engine-v2', now, now);
 
-    res.status(201).json({
-      id: planId,
+      logAudit({
+        actorId: req.user.sub,
+        action: 'plan.generated',
+        targetType: 'plan',
+        targetId: planId,
+        metadata: { kind, goal: publicPlan.goal, version: publicPlan.version, guest: false }
+      });
+
+      return res.status(201).json({
+        id: planId,
+        kind,
+        title,
+        version: publicPlan.version,
+        plan: publicPlan,
+        validation,
+        createdAt: now,
+        guest: false,
+        persisted: true
+      });
+    }
+
+    return res.status(200).json({
+      id: null,
       kind,
       title,
-      version: generatedPlan.version,
-      plan: generatedPlan,
+      version: publicPlan.version,
+      plan: publicPlan,
       validation,
-      createdAt: now
+      createdAt: now,
+      guest: true,
+      persisted: false
     });
   });
 

@@ -1,85 +1,114 @@
-// Stage 10 — Workout Engine UI (XSS-free safe DOM rendering + painful/skipped/completed feedback)
-(function(){
-const week = {
-  Mon:[["Bench Press","4x8 · RPE 7 · Warm-up: 5m shoulder mobility"],["Incline DB Press","3x10 · Rest 60s"],["Cable Fly","3x12 · Controlled tempo"],["Overhead Press","3x8 · Core braced"]],
-  Tue:[["Deadlift","4x6 · RPE 7 · Neutral spine"],["Lat Pulldown","3x10 · Full stretch"],["Barbell Row","3x10 · Pull to hip"],["Face Pull","3x15 · Posture focus"]],
-  Wed:[["Rest / Mobility","20 min · Low-impact recovery"],["Stretch Flow","15 min · Nasal breathing"]],
-  Thu:[["Back Squat","4x8 · Knee-friendly sub: Glute Bridge"],["Leg Press","3x12 · Controlled descent"],["Walking Lunge","3x12 · Soft landing"],["Calf Raise","4x15 · Pause at top"]],
-  Fri:[["Push Press","4x6 · RPE 7"],["Dips / Incline Push-Up","3x10 · Shoulder-safe range"],["Lateral Raise","3x15"],["Tricep Pushdown","3x12"]],
-  Sat:[["Pull-ups / Assisted Pull","4x8"],["Seated Row","3x10"],["Hammer Curl","3x12"],["Plank","3x45s"]],
-  Sun:[["Rest","Full recovery day"]]
-};
-const dayTabs=document.getElementById("dayTabs"), exList=document.getElementById("exList");
-if (!dayTabs || !exList) return;
+// Workout tab — renders active plan from localStorage (guest or saved)
+(function () {
+  const ACTIVE_PLAN_KEY = 'vyora_active_plan';
+  const dayTabs = document.getElementById('dayTabs');
+  const exList = document.getElementById('exList');
+  const statusEl = document.getElementById('workoutPlanStatus');
+  const progressionEl = document.getElementById('workoutProgression');
+  if (!dayTabs || !exList) return;
 
-Object.keys(week).forEach((d,i)=>{
-  const b=document.createElement("button");
-  b.type="button";
-  b.textContent=d;
-  if(i===0) b.classList.add("active");
-  b.addEventListener("click",()=>{
-    document.querySelectorAll("#dayTabs button").forEach(x=>x.classList.remove("active"));
-    b.classList.add("active");
-    renderDay(d);
-  });
-  dayTabs.appendChild(b);
-});
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  }
 
-function renderDay(d){
-  exList.replaceChildren();
-  week[d].forEach(([name,meta])=>{
-    const row=document.createElement("div");
-    row.className="exrow";
+  function readActivePlan() {
+    try {
+      const raw = localStorage.getItem(ACTIVE_PLAN_KEY);
+      if (!raw) return null;
+      const wrapper = JSON.parse(raw);
+      return wrapper.plan || wrapper;
+    } catch {
+      return null;
+    }
+  }
 
-    const info=document.createElement("div");
-    const exName=document.createElement("div");
-    exName.className="exname";
-    exName.textContent=name;
-    const exMeta=document.createElement("div");
-    exMeta.className="exmeta";
-    exMeta.textContent=meta;
-    info.append(exName, exMeta);
+  function placeholder() {
+    dayTabs.replaceChildren();
+    exList.replaceChildren();
+    if (progressionEl) progressionEl.textContent = '';
+    if (statusEl) {
+      statusEl.textContent = 'No active plan found. Head to the Home page to build your custom plan.';
+    }
+  }
 
-    const actions=document.createElement("div");
-    actions.className="chat-row";
+  function renderDay(day, plan) {
+    exList.replaceChildren();
+    const session = (plan.days || []).find(d => d.day === day);
+    if (!session) {
+      exList.appendChild(el('p', 'bottom-note', 'No session scheduled for this day.'));
+      return;
+    }
+    const header = el('div', 'exrow');
+    header.appendChild(el('div', 'exname', `${session.day} · ${session.focus || ''} (${session.durationMin || 30}m · ${session.environment || 'flexible'})`));
+    if (session.warmUp) header.appendChild(el('div', 'exmeta', `Warm-up: ${session.warmUp}`));
+    exList.appendChild(header);
 
-    const painBtn=document.createElement("button");
-    painBtn.type="button";
-    painBtn.className="btn ghost";
-    painBtn.style.fontSize="11.5px";
-    painBtn.style.padding="4px 8px";
-    painBtn.textContent="Pain / Swap";
-    painBtn.addEventListener("click", async ()=>{
-      exMeta.textContent = "Stopped aggravating movement → Switched to conservative pain-free mobility/glute bridge. Consult a clinician if pain persists.";
-      try {
-        await window.VyoraAPI.logWorkout({day:d,exercise:name,volume:meta,painFlag:true,status:"modified_pain",completedAt:new Date().toISOString()});
-      } catch {}
-    });
-
-    const btn=document.createElement("button");
-    btn.type="button";
-    btn.className="check";
-    btn.setAttribute("aria-label",`Mark ${name} done`);
-    btn.addEventListener("click",async()=>{
-      const done=!row.classList.contains("done");
-      row.classList.toggle("done",done);
-      if(done){
-        try{
-          await window.VyoraAPI.logWorkout({day:d,exercise:name,volume:meta,completedAt:new Date().toISOString(),status:"completed"});
-          btn.textContent="✓";
-        }catch(e){
-          btn.textContent="!";
-          btn.title="Could not save workout: "+e.message;
-        }
-      } else {
-        btn.textContent="";
+    (session.exercises || []).forEach(exercise => {
+      const row = el('div', 'exrow');
+      const name = el('div', 'exname', exercise.name || 'Exercise');
+      const metaParts = [exercise.prescription, exercise.rest ? `Rest ${exercise.rest}` : null, exercise.intensityRpe]
+        .filter(Boolean)
+        .join(' · ');
+      const meta = el('div', 'exmeta', metaParts);
+      if (exercise.formCue) {
+        meta.appendChild(document.createTextNode(` · ${exercise.formCue}`));
       }
+      const demo = document.createElement('a');
+      demo.textContent = 'Watch demo ↗';
+      demo.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.videoQuery || exercise.name || 'exercise form')}`;
+      demo.target = '_blank';
+      demo.rel = 'noopener noreferrer';
+      demo.style.marginLeft = '8px';
+      demo.style.fontSize = '12px';
+      meta.appendChild(demo);
+      row.append(name, meta);
+      exList.appendChild(row);
     });
 
-    actions.append(painBtn, btn);
-    row.append(info, actions);
-    exList.appendChild(row);
+    if (session.coolDown) {
+      const cool = el('div', 'exrow');
+      cool.appendChild(el('div', 'exmeta', `Cool-down: ${session.coolDown}`));
+      exList.appendChild(cool);
+    }
+  }
+
+  function renderPlan(plan) {
+    if (!plan || !Array.isArray(plan.days) || !plan.days.length) {
+      placeholder();
+      return;
+    }
+    if (statusEl) statusEl.textContent = '';
+    if (progressionEl) progressionEl.textContent = plan.weeklyProgressionNote || '';
+
+    const days = plan.days.map(d => d.day);
+    dayTabs.replaceChildren();
+    let selected = days[0];
+
+    days.forEach((day, index) => {
+      const button = el('button', index === 0 ? 'active' : '', day);
+      button.type = 'button';
+      button.setAttribute('role', 'tab');
+      button.addEventListener('click', () => {
+        selected = day;
+        dayTabs.querySelectorAll('button').forEach(node => node.classList.remove('active'));
+        button.classList.add('active');
+        renderDay(day, plan);
+      });
+      dayTabs.appendChild(button);
+    });
+    renderDay(selected, plan);
+  }
+
+  function refresh() {
+    renderPlan(readActivePlan());
+  }
+
+  refresh();
+  window.addEventListener('vyora:plan-updated', refresh);
+  window.addEventListener('storage', (event) => {
+    if (event.key === ACTIVE_PLAN_KEY) refresh();
   });
-}
-renderDay("Mon");
 })();
