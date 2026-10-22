@@ -79,12 +79,11 @@
         meta.appendChild(document.createTextNode(` · ${exercise.formCue}`));
       }
       const demo = document.createElement('a');
+      demo.className = 'plan-link';
       demo.textContent = 'Watch demo ↗';
       demo.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.videoQuery || exercise.name || 'exercise form')}`;
       demo.target = '_blank';
       demo.rel = 'noopener noreferrer';
-      demo.style.marginLeft = '8px';
-      demo.style.fontSize = '12px';
       meta.appendChild(demo);
       row.append(name, meta);
       exList.appendChild(row);

@@ -146,11 +146,9 @@
       dailyMeals.forEach((m, idx) => {
         const mealDiv = el('div', 'meal');
         if (idx === dailyMeals.length - 1) mealDiv.style.border = 'none';
-        const title = el('b', '', `${m.slot}: ${m.title || ''}`);
-        const itemsP = el('p', '', Array.isArray(m.items) ? m.items.join(' · ') : String(m));
-        itemsP.style.margin = '2px 0';
-        const metaSmall = el('small', '', `${m.approxKcal || 0} kcal · ${m.approxProteinG || 0} g protein`);
-        metaSmall.style.opacity = '0.8';
+        const title = el('b', 'meal-title', `${m.slot}: ${m.title || ''}`);
+        const itemsP = el('p', 'meal-items', Array.isArray(m.items) ? m.items.join(' · ') : String(m));
+        const metaSmall = el('small', 'meal-meta', `${m.approxKcal || 0} kcal · ${m.approxProteinG || 0} g protein`);
         mealDiv.append(title, itemsP, metaSmall);
         dayMealsBox.appendChild(mealDiv);
       });
@@ -195,12 +193,11 @@
           label.textContent = rx ? `${exercise.name} [${rx}]` : String(exercise.name || '');
           line.appendChild(label);
           const demo = document.createElement('a');
-          demo.textContent = ' Watch demo ↗';
+          demo.className = 'plan-link';
+          demo.textContent = 'Watch demo ↗';
           demo.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.videoQuery || exercise.name || 'exercise form')}`;
           demo.target = '_blank';
           demo.rel = 'noopener noreferrer';
-          demo.style.marginLeft = '6px';
-          demo.style.fontSize = '12px';
           line.appendChild(demo);
           row.appendChild(line);
         });
@@ -324,7 +321,7 @@
     ];
     prototypeSupplements.forEach(({ label, query }) => {
       const link = document.createElement('a');
-      link.className = 'tag';
+      link.className = 'tag plan-link';
       link.href = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
@@ -343,6 +340,7 @@
       const vc = el('div', 'video-card');
       vc.appendChild(el('b', '', title));
       const a = document.createElement('a');
+      a.className = 'plan-link';
       a.textContent = 'Watch demo ↗';
       a.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
       a.target = '_blank';
@@ -361,12 +359,11 @@
       ? `Open Google Maps for gyms in ${location}:`
       : 'Add a city or neighborhood above for a local search, or open a general maps search:');
     const gymLink = document.createElement('a');
+    gymLink.className = 'plan-link';
     gymLink.href = mapsHref;
     gymLink.target = '_blank';
     gymLink.rel = 'noopener noreferrer';
     gymLink.textContent = location ? `Gyms in ${location} on Google Maps ↗` : 'Gyms near me on Google Maps ↗';
-    gymLink.style.display = 'inline-block';
-    gymLink.style.marginTop = '6px';
     const gymNote = el('p', 'bottom-note', 'Prototype link only — not live listings. Save verified places under Gyms & Cafés when a maps provider is configured.');
     gymBox.append(gymIntro, gymLink, gymNote);
 
